@@ -873,11 +873,7 @@ function applyLocalDefaultRoom() {
     hostIconUrl: "",
     hostNick: "",
     imageUrl: "",
-    list: JSON.stringify([
-      ["A", 1, "#A7F3D0"],
-      ["B", 1, "#BFDBFE"],
-      ["C", 1, "#FBCFE8"],
-    ]),
+    list: JSON.stringify([]),
     phase: 0,
     index: -1,
     indexview: -1,
