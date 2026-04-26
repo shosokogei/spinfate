@@ -2629,7 +2629,7 @@
     async function saveRoomFromEditor() {
       const isTopPage = !isRoomPage && !isHostPage;
       if (!isTopPage && !dom.targetPrizeSelect.value) {
-        alert("項目を選んでください。");
+        alert("項目を選んでください");
         return;
       }
       const items = readItemsFromEditor();
