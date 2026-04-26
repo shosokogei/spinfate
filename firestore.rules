@@ -1,0 +1,57 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function isHost(roomUid) { return signedIn() && request.auth.uid == roomUid; }
+
+    // ルームの現在状態（URLで誰でも閲覧できる）
+    match /rooms/{roomUid} {
+
+      allow get, list: if true;
+      allow create: if isHost(roomUid);
+      allow update: if isHost(roomUid);
+      allow delete: if isHost(roomUid);
+    }
+
+    // profiles は公開しない（本人のみなど、ここは既存のあなた方針でOK）
+    match /spinfate_profiles/{uid} {
+      allow read, write: if signedIn() && request.auth.uid == uid;
+    }
+    
+    match /prize_masters/{docId} {
+      allow read: if signedIn() && request.auth.uid == resource.data.hostUid;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.hostUid;
+      allow update, delete: if signedIn() && request.auth.uid == resource.data.hostUid;
+    }
+
+    match /prize_images/{docId} {
+      allow read: if signedIn() && request.auth.uid == resource.data.hostUid;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.hostUid;
+      allow update, delete: if signedIn() && request.auth.uid == resource.data.hostUid;
+    }
+
+    match /missing_prize_images/{docId} {
+      allow read: if signedIn() && request.auth.uid == resource.data.hostUid;
+      allow create: if signedIn() && request.auth.uid == request.resource.data.hostUid;
+      allow update, delete: if signedIn() && request.auth.uid == resource.data.hostUid;
+    }
+
+    match /joining/{joinId} {
+      allow read: if signedIn() && (
+        resource.data.hostUid == request.auth.uid ||
+        resource.data.participantUid == request.auth.uid
+      );
+
+      allow create: if signedIn() &&
+        request.resource.data.participantUid == request.auth.uid;
+
+      allow update: if signedIn() && (
+        resource.data.hostUid == request.auth.uid ||
+        resource.data.participantUid == request.auth.uid
+      );
+
+      allow delete: if false;
+    }
+  }
+}

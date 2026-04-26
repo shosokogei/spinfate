@@ -1,0 +1,47 @@
+{
+  "hosting": {
+    "site": "spinfate1",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      ".firebaserc",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      { "source": "/api/updateRoomIndex",        "run": { "serviceId": "updateroomindex",        "region": "us-central1" } },
+      { "source": "/api/entrySlot",              "run": { "serviceId": "entryslot",              "region": "us-central1" } },
+      { "source": "/api/startRoomSpin",          "run": { "serviceId": "startroomspin",          "region": "us-central1" } },
+      { "source": "/api/stopRoomSpin",           "run": { "serviceId": "stoproomspin",           "region": "us-central1" } },
+      { "source": "/api/finishRoomSpin",         "run": { "serviceId": "finishroomspin",         "region": "us-central1" } },
+      { "source": "/api/requestEntryApproval",   "run": { "serviceId": "requestentryapproval",   "region": "us-central1" } },
+      { "source": "/api/reviewEntryApproval",    "run": { "serviceId": "reviewentryapproval",    "region": "us-central1" } },
+      { "source": "/api/savePrizeMaster",        "run": { "serviceId": "saveprizemaster",        "region": "us-central1" } },
+      { "source": "/api/addMissingPrizeImage",   "run": { "serviceId": "addmissingprizeimage",   "region": "us-central1" } },
+      { "source": "/api/clearMissingPrizeImage", "run": { "serviceId": "clearmissingprizeimage", "region": "us-central1" } },
+      { "source": "/api/listPrizeMasters",       "run": { "serviceId": "listprizemasters",       "region": "us-central1" } },
+      { "source": "/api/deletePrizeMaster",      "run": { "serviceId": "deleteprizemaster",      "region": "us-central1" } },
+      { "source": "/api/listMissingPrizeImages", "run": { "serviceId": "listmissingprizeimages", "region": "us-central1" } },
+      { "source": "/api/applyPrizeImage",        "run": { "serviceId": "applyprizeimage",        "region": "us-central1" } },
+      { "source": "/api/listPrizeImages",        "run": { "serviceId": "listprizeimages",        "region": "us-central1" } },
+      { "source": "/api/deletePrizeImage",       "run": { "serviceId": "deleteprizeimage",       "region": "us-central1" } },
+      { "source": "/api/saveRoomConfig",         "run": { "serviceId": "saveroomconfig",         "region": "us-central1" } },
+      { "source": "/h/**",                       "destination": "/index.html" },
+      { "source": "**",                          "destination": "/index.html" }
+    ]
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+    }
+  ]
+}

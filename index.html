@@ -1,0 +1,3585 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SpinFate</title>
+  <link rel="icon" href="/favi.ico">
+  <link rel="preload" as="image" href="/sf_logo.webp">
+  <style>
+    :root{
+      --bg:#ffffff;
+      --glass: rgba(255,255,255,.78);
+      --line: rgba(15,23,42,.10);
+      --text:#0f172a;
+      --muted: rgba(15,23,42,.55);
+      --shadow: 0 18px 48px rgba(15,23,42,.10);
+      --r: 22px;
+
+      /* portrait-ish */
+      --teal:#23c4d7;
+      --orange:#ff9b2f;
+      --whiteNeedle: rgba(255,255,255,.96);
+    }
+    *{ box-sizing:border-box; }
+    html,body{ height:100%; }
+    body{
+      margin:0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans JP", "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(900px 520px at 20% 0%, rgba(35,196,215,.10), transparent 55%),
+        radial-gradient(900px 520px at 85% 10%, rgba(255,155,47,.10), transparent 55%),
+        linear-gradient(180deg, #fff, #fff);
+      overflow:hidden;
+    }
+
+    .stage{
+      height: 100dvh;
+      width: 100vw;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:flex-start;
+      padding: 14px 14px 16px;
+      gap: 10px;
+    }
+
+    header{
+      width: 100%;
+      max-width: 860px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding: 6px 8px;
+      flex: 0 0 auto;
+    }
+    header img{
+      height: 44px;
+      width:auto;
+      display:block;
+      filter: drop-shadow(0 10px 18px rgba(15,23,42,.12));
+    }
+
+    .card{
+      width: 100%;
+      max-width: 860px;
+      flex: 1 1 auto;
+      min-height: 0;
+      background: var(--glass);
+      backdrop-filter: blur(12px);
+      border:1px solid var(--line);
+      border-radius: var(--r);
+      box-shadow: var(--shadow);
+      padding: 14px 14px 14px;
+      position: relative;
+      display:flex;
+      flex-direction:column;
+      gap: 10px;
+    }
+    .topBar {
+      display: flex;
+      flex-direction: column;
+      align-items: center; /* 縦軸中央 */
+      justify-content: center; /* 横軸中央 */
+      width: 100%;
+    }
+    .result{
+      text-align:center;
+      font-size: clamp(18px, 2.8vmin, 24px);
+      font-weight: 950;
+      letter-spacing:.02em;
+      min-height: 30px;
+    }
+    .hint{
+      text-align:center;
+      font-size: 12px;
+      color: var(--muted);
+      height: 16px;
+      line-height: 16px;
+      margin-top: 2px;
+      overflow: hidden;
+    }
+    .title{
+      text-align:center;
+      font-size: clamp(18px, 3.2vmin, 26px);
+      font-weight: 950;
+      letter-spacing:.02em;
+      min-height: 30px;
+    }
+    .midResult{
+      text-align:center;
+      margin-top: 10px; /* タイトルと円の間寄り */
+      font-size: clamp(18px, 3.0vmin, 24px);
+      font-weight: 950;
+      letter-spacing:.02em;
+      height: 28px;
+      line-height: 28px;
+      color: rgba(15,23,42,.85);
+      overflow: hidden;
+    }
+    .wheelArea{
+      flex: 1 1 auto;
+      min-height: 0;
+      display:grid;
+      place-items:center;
+      position: relative;
+      padding: 4px 0 4px;
+    }
+
+    .wheelWrap{
+      position: relative;
+      width: min(86vmin, 520px);
+      height: min(86vmin, 520px);
+      display:grid;
+      place-items:center;
+    }
+
+    canvas{
+      width: 100%;
+      height: 100%;
+      border-radius: 999px;
+      display:block;
+      background: rgba(255,255,255,.65);
+      box-shadow:
+        inset 0 0 0 2px rgba(15,23,42,.08),
+        inset 0 0 0 14px rgba(15,23,42,.03),
+        0 14px 34px rgba(15,23,42,.10);
+      transition: transform 0ms cubic-bezier(.2,.8,.2,1);
+    }
+
+    /* 針：シンプル立体（白＋薄い縁＋影） */
+    .needle{
+      position:absolute;
+      top: -8px;
+      left:50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      z-index: 20;
+      pointer-events:none;
+
+      /* 本体（白） */
+      border-left: 18px solid transparent;
+      border-right: 18px solid transparent;
+      border-top: 38px solid rgba(255,255,255,.98);
+
+      /* ルーレット縁っぽい影 */
+      filter:
+        drop-shadow(0 10px 12px rgba(15,23,42,.14))
+        drop-shadow(0 2px 0 rgba(255,255,255,.55));
+    }
+
+    /* 薄い縁取り（外側） */
+    .needle::before{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:-38px;                 /* border-topの高さに合わせる */
+      transform: translateX(-50%);
+      width: 0; height: 0;
+
+      border-left: 19px solid transparent;
+      border-right: 19px solid transparent;
+      border-top: 40px solid rgba(15,23,42,.12);  /* 薄い縁 */
+      z-index: -1;
+    }
+
+    /* 内側のハイライト（立体感） */
+    .needle::after{
+      content:"";
+      position:absolute;
+      left:50%;
+      top:-36px;
+      transform: translateX(-50%);
+      width: 0; height: 0;
+
+      border-left: 10px solid transparent;
+      border-right: 10px solid transparent;
+      border-top: 22px solid rgba(255,255,255,.55);
+      z-index: 1;
+      opacity: .9;
+    }
+
+    /* Center button: real center, one line */
+    .centerBtn{
+      --accent: #66aaee;
+      position:absolute;
+      left:50%;
+      top:50%;
+      transform: translate(-50%,-50%);
+      width:126px;
+      height:126px;
+      border-radius:999px;
+      background:rgba(255,255,255,.96);
+      border:1px solid rgba(15,23,42,.10);
+      box-shadow:
+        0 14px 30px rgba(15,23,42,.10),
+        inset 0 0 0 1px rgba(255,255,255,.85);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      cursor:pointer;
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+      padding:0;
+      position:absolute;
+    }
+    .centerBtn::before{
+      content:"";
+      position:absolute;
+      inset:4px;
+      border-radius:999px;
+      border:1px solid #ccc;
+      pointer-events:none;
+    }
+    .centerBtn:active{ transform: translate(-50%,-50%) translateY(1px); }
+    .centerBtn.disabled{ opacity:.65; cursor:not-allowed; }
+    .centerBtn.stop{
+      --accent: var(--orange);
+    }
+
+    .centerBtn .label{
+      font-weight:1000;
+      letter-spacing:.08em;
+      font-size:22px;
+      line-height:1;
+      text-align:center;
+      width:100%;
+      display:block;
+      color:var(--accent);
+    }
+    .centerBtn:active{ transform: translate(-50%,-50%) translateY(1px); }
+    .centerBtn.disabled{ opacity:.65; cursor:not-allowed; }
+
+    .centerBtn .label{
+      font-weight: 1000;
+      letter-spacing:.08em;
+      font-size: 22px;        /* bigger */
+      line-height: 1;
+      text-align:center;
+      width:100%;
+      display:block;
+    }
+
+    .fab{
+      position:absolute;
+      right: 14px;
+      bottom: 14px;
+      width: 58px;
+      height: 58px;
+      border-radius: 999px;
+      border:none;
+      cursor:pointer;
+      background: var(--teal);
+      color:#ffffff;
+      font-size: 34px;
+      font-weight: 950;
+      box-shadow: 0 18px 40px rgba(15,23,42,.20);
+      user-select:none;
+      -webkit-tap-highlight-color: transparent;
+
+      display:flex;
+      align-items:center;
+      justify-content:center;
+    }
+    .fab:active{ transform: translateY(1px); }
+
+    /* Modal */
+    .modalBack{
+      position:fixed; inset:0;
+      background: rgba(15,23,42,.28);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      z-index: 50;
+    }
+    .modal{
+      width: min(560px, 96vw);
+      max-height: min(86dvh, 820px);
+      overflow:auto;
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(15,23,42,.12);
+      border-radius: 18px;
+      box-shadow: 0 26px 70px rgba(15,23,42,.22);
+    }
+    .mh{
+      padding: 14px 14px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid rgba(15,23,42,.10);
+      position: sticky;
+      top: 0;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(10px);
+      z-index: 2;
+    }
+    .mh .t{ font-weight: 950; letter-spacing:.02em; }
+    .mh .x{
+      border:none;
+      background: rgba(15,23,42,.06);
+      border-radius: 10px;
+      font-size: 18px;
+      cursor:pointer;
+      padding: 8px 10px;
+    }
+    .mb{ padding: 14px; }
+    .rowHead{
+      display:flex;
+      gap:10px;
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+      padding: 0 2px;
+    }
+    .rowHead span:nth-child(1){ flex: 1; }
+    .rowHead span:nth-child(2){ width: 92px; }
+    .rowHead span:nth-child(3){ width: 92px; }
+
+    .itemRow{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      margin-bottom: 10px;
+    }
+    .itemRow input[type="text"],
+    .itemRow select{
+      flex:1;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border:1px solid rgba(15,23,42,.12);
+      background: rgba(255,255,255,.96);
+      font-size: 14px;
+      outline:none;
+    }
+    .itemRow input[type="number"]{
+      width: 92px;
+      padding: 12px 10px;
+      border-radius: 12px;
+      border:1px solid rgba(15,23,42,.12);
+      background: rgba(255,255,255,.96);
+      font-size: 14px;
+      outline:none;
+    }
+    .swatch{
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border:1px solid rgba(15,23,42,.12);
+      box-shadow: inset 0 0 0 6px rgba(255,255,255,.30);
+      cursor:pointer;
+      flex: 0 0 auto;
+    }
+    .del{
+      border:none;
+      background: rgba(15,23,42,.06);
+      color: rgba(15,23,42,.70);
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight: 950;
+    }
+    .mf{
+      padding: 12px 14px;
+      border-top:1px solid rgba(15,23,42,.10);
+      display:flex;
+      justify-content:space-between;
+      gap:10px;
+      background: rgba(255,255,255,.92);
+      position: sticky;
+      bottom: 0;
+      z-index: 2;
+    }
+    .btn{
+      border:none;
+      border-radius: 12px;
+      padding: 12px 14px;
+      cursor:pointer;
+      font-weight: 900;
+      letter-spacing:.01em;
+    }
+    .btn.ghost{ background: rgba(15,23,42,.06); color: rgba(15,23,42,.80); }
+    .btn.primary{
+      background: var(--orange);
+      color: #ffffff;
+    }
+    input[type="color"]{ width:1px; height:1px; opacity:0; position:absolute; pointer-events:none; }
+    .hdr{
+      width: 100%;
+      max-width: 860px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      padding: 6px 8px;
+      flex: 0 0 auto;
+    }
+    .hdr img{
+      height: 44px;
+      width:auto;
+      display:block;
+      filter: drop-shadow(0 10px 18px rgba(15,23,42,.12));
+    }
+    .hdrRight{ display:flex; align-items:center; gap:10px; }
+    .hdrBtn{
+      border:none;
+      border-radius: 12px;
+      padding: 10px 12px;
+      cursor:pointer;
+      font-weight: 950;
+      background: rgba(15,23,42,.06);
+      color: rgba(15,23,42,.86);
+    }
+    .hdrBtn:active{ transform: translateY(1px); }
+    .hdrBtn.ghost{ background: rgba(15,23,42,.06); }
+    .hostBox{
+      display:flex;
+      align-items:center;
+      gap:10px;
+    }
+    .hostTag{
+      font-size:12px;
+      font-weight:950;
+      padding:6px 10px;
+      border-radius:999px;
+      background:transparent;
+      color:rgba(15,23,42,.86);
+    }
+    #btnStart {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+      font-weight: 700 !important;
+    }
+
+    .entryIconBtn{
+      border:none;
+      background:transparent;
+      padding:0;
+      cursor:pointer;
+      position:relative;
+      display:none;
+      align-items:center;
+      justify-content:center;
+    }
+    .entryIconBtn img{
+      display:block;
+      width:72px;
+      height:72px;
+      object-fit:contain;
+      border-radius:14px;
+      background:transparent;
+    }
+    .entryHostBtn{
+      width:44px;
+      height:44px;
+      border:none;
+      background:transparent;
+      padding:0;
+      margin-right:8px;
+      cursor:pointer;
+      position:relative;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 auto;
+    }
+    .entryHostBtn img{
+      display:block;
+      width:44px;
+      height:44px;
+      object-fit:contain;
+      border-radius:10px;
+    }
+    .entryBadge{
+      position:absolute;
+      right:-4px;
+      top:-4px;
+      min-width:18px;
+      height:18px;
+      padding:0 5px;
+      border-radius:999px;
+      background:#ff3b30;
+      color:#fff;
+      font-size:11px;
+      font-weight:900;
+      line-height:18px;
+      text-align:center;
+      box-shadow:0 6px 14px rgba(15,23,42,.18);
+      display:none;
+    }
+    .entryReqList{
+      display:grid;
+      gap:10px;
+    }
+    .entryReqRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:14px;
+      background:rgba(15,23,42,.03);
+    }
+    .entryReqLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .entryReqLeft img{
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      object-fit:cover;
+      background:rgba(15,23,42,.08);
+      flex:0 0 auto;
+    }
+    .entryReqNick{
+      font-size:14px;
+      font-weight:900;
+      color:rgba(15,23,42,.88);
+      word-break:break-word;
+    }
+    .entryReqActions{
+      display:flex;
+      gap:8px;
+      flex:0 0 auto;
+    }
+    .entryOkBtn{
+      border:none;
+      border-radius:10px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+      background:#25c45a;
+      color:#fff;
+    }
+    .entryNgBtn{
+      border:none;
+      border-radius:10px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+      background:#ff4d4f;
+      color:#fff;
+    }
+    .entryEmpty{
+      font-size:13px;
+      color:rgba(15,23,42,.58);
+      text-align:center;
+      padding:14px 0;
+    }
+        .entryHostBtn{
+      width:44px;
+      height:44px;
+      border:none;
+      background:transparent;
+      padding:0;
+      margin-right:8px;
+      cursor:pointer;
+      position:relative;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      flex:0 0 auto;
+    }
+    .entryHostBtn img{
+      display:block;
+      width:44px;
+      height:44px;
+      object-fit:contain;
+      border-radius:10px;
+      background:transparent;
+    }
+    .entryBadge{
+      position:absolute;
+      right:-4px;
+      top:-4px;
+      min-width:18px;
+      height:18px;
+      padding:0 5px;
+      border-radius:999px;
+      background:#ff3b30;
+      color:#fff;
+      font-size:11px;
+      font-weight:900;
+      line-height:18px;
+      text-align:center;
+      display:none;
+    }
+    .entryReqList{
+      display:grid;
+      gap:10px;
+    }
+    .entryReqRow{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      padding:12px;
+      border:1px solid rgba(15,23,42,.10);
+      border-radius:14px;
+      background:rgba(15,23,42,.03);
+    }
+    .entryReqLeft{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width:0;
+    }
+    .entryReqLeft img{
+      width:40px;
+      height:40px;
+      border-radius:50%;
+      object-fit:cover;
+      background:rgba(15,23,42,.08);
+      flex:0 0 auto;
+    }
+    .entryReqNick{
+      font-size:14px;
+      font-weight:900;
+      color:rgba(15,23,42,.88);
+      word-break:break-word;
+    }
+    .entryReqActions{
+      display:flex;
+      gap:8px;
+      flex:0 0 auto;
+    }
+    .entryOkBtn{
+      border:none;
+      border-radius:10px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+      background:#25c45a;
+      color:#fff;
+    }
+    .entryNgBtn{
+      border:none;
+      border-radius:10px;
+      padding:10px 12px;
+      cursor:pointer;
+      font-weight:900;
+      background:#ff4d4f;
+      color:#fff;
+    }
+    .entryEmpty{
+      font-size:13px;
+      color:rgba(15,23,42,.58);
+      text-align:center;
+      padding:14px 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <header class="hdr">
+      <img src="/sf_logo.webp" alt="SpinFate" />
+      <div class="hdrRight" id="hdrRight">
+        <button class="hdrBtn" id="btnLogin" type="button">ログイン</button>
+
+        <div class="hostBox" id="userBox" style="display:none; position:relative;">
+          <button class="hdrBtn" id="btnGoRoom" type="button" style="display:none; margin-right:8px; background:var(--teal); color:#fff;">Top</button>
+
+          <button id="btnEntryRequestsHost" class="entryHostBtn" type="button" title="参加希望者">
+            <img src="/img/i5.jpg" alt="参加希望者">
+            <span id="entryRequestHostBadge" class="entryBadge">0</span>
+          </button>
+
+          <button id="accountMenuBtn" type="button" style="
+            display:flex;
+            align-items:center;
+            gap:10px;
+            border:none;
+            background:transparent;
+            padding:0;
+            cursor:pointer;
+          ">
+            <img id="userIcon" src="" style="width:32px; height:32px; border-radius:50%; object-fit:cover; display:none;">
+            <span id="userTag" style="
+              font-size:12px;
+              font-weight:950;
+              padding:6px 10px;
+              border-radius:999px;
+              background:transparent;
+              color:rgba(15,23,42,.86);
+            ">USER</span>
+          </button>
+
+          <div id="accountMenu" style="
+            display:none;
+            position:absolute;
+            top:calc(100% + 10px);
+            right:72px;
+            min-width:260px;
+            background:rgba(255,255,255,.98);
+            border:1px solid rgba(15,23,42,.10);
+            border-radius:16px;
+            box-shadow:0 18px 40px rgba(15,23,42,.16);
+            padding:10px;
+            z-index:1000;
+          ">
+            <button id="btnAccountEdit" type="button" style="
+              width:100%;
+              border:none;
+              background:rgba(15,23,42,.06);
+              color:rgba(15,23,42,.86);
+              border-radius:12px;
+              padding:12px 14px;
+              font-weight:900;
+              text-align:left;
+              cursor:pointer;
+              margin-bottom:8px;
+            ">アカウント情報編集</button>
+
+            <button id="btnPrizeList" type="button" style="
+              width:100%;
+              border:none;
+              background:rgba(15,23,42,.06);
+              color:rgba(15,23,42,.86);
+              border-radius:12px;
+              padding:12px 14px;
+              font-weight:900;
+              text-align:left;
+              cursor:pointer;
+              margin-bottom:8px;
+            ">登録景品一覧</button>
+
+            <button id="btnPrizeImageList" type="button" style="
+              width:100%;
+              border:none;
+              background:rgba(15,23,42,.06);
+              color:rgba(15,23,42,.86);
+              border-radius:12px;
+              padding:12px 14px;
+              font-weight:900;
+              text-align:left;
+              cursor:pointer;
+              margin-bottom:8px;
+              display:flex;
+              align-items:center;
+              justify-content:space-between;
+            ">
+              <span>登録画像一覧</span>
+              <span id="missingImageCount" style="
+                display:none;
+                min-width:20px;
+                height:20px;
+                padding:0 6px;
+                border-radius:999px;
+                background:#ff3b30;
+                color:#fff;
+                font-size:11px;
+                font-weight:900;
+                line-height:20px;
+                text-align:center;
+              ">0</span>
+            </button>
+
+            <button class="hdrBtn ghost" id="btnLogout" type="button" style="
+              width:100%;
+              text-align:left;
+              justify-content:flex-start;
+            ">ログアウト</button>
+          </div>
+        </div>
+      </div>
+    </header>
+    <section class="card" id="appWindow">
+      <div class="topBar">
+        <div style="width:100%;">
+          <div style="
+            display:flex;
+            align-items:flex-start;
+            justify-content:space-between;
+            gap:12px;
+            margin-bottom:2px;
+            width:100%;
+          ">
+            <div id="roomNameText" style="display:flex; align-items:center; gap:8px; justify-content:flex-start;
+              text-align:left; font-size: 24px; color: var(--muted); font-weight: 800; min-height: 1.2em; min-width:0;">
+              <img id="roomHostIcon" alt="" style="width:40px; height:40px; border-radius:50%; object-fit:cover; display:none;">
+              <span id="roomNameLabel"></span>
+            </div>
+
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex:0 0 auto;">
+              <div id="spinRemainingMini" style="
+                display:none;
+                flex:0 0 auto;
+                font-size:11px;
+                color:rgba(15,23,42,.58);
+                text-align:right;
+                white-space:nowrap;
+                padding-top:4px;
+              "></div>
+
+              <button id="entryRequestBtn" class="entryIconBtn" type="button" title="参加希望">
+                <img id="entryRequestIcon" src="/img/i0.jpg" alt="参加希望">
+              </button>
+            </div>
+          </div>
+
+          <div id="descWrap" style="
+            display:none;
+            width:100%;
+            margin:4px 0 8px;
+            padding:0 30px;
+            position:relative;
+          ">
+            <div id="descText" style="
+              font-size:13px;
+              line-height:1.55;
+              color:rgba(15,23,42,.72);
+              word-break:break-word;
+              overflow:hidden;
+              display:-webkit-box;
+              -webkit-box-orient:vertical;
+              -webkit-line-clamp:2;
+              line-clamp:2;
+            "></div>
+            <button id="descToggle" type="button" style="
+              display:none;
+              position:absolute;
+              right:0;
+              bottom:0;
+              border:none;
+              background:transparent;
+              color:rgba(15,23,42,.58);
+              font-size:14px;
+              font-weight:900;
+              cursor:pointer;
+              padding:2px 4px;
+            ">▽</button>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:center; gap:10px;">
+            <div class="title" id="titleText" style="text-align:center;">タイトル</div>
+            <img id="drawImageThumb" alt="" style="
+              width:40px;
+              height:40px;
+              border-radius:50%;
+              object-fit:cover;
+              display:none;
+              cursor:zoom-in;
+              border:1px solid rgba(15,23,42,.10);
+              background:#fff;
+            ">
+          </div>
+
+          <div id="prizeInfo" style="
+            display:none;
+            margin-top:8px;
+            text-align:center;
+          ">
+            <div id="prizeInfoInner" style="
+              display:inline-flex;
+              align-items:center;
+              gap:10px;
+              padding:8px 14px;
+              border-radius:999px;
+              background:rgba(255,255,255,.82);
+              border:1px solid rgba(15,23,42,.08);
+              box-shadow:0 10px 24px rgba(15,23,42,.08);
+            ">
+              <img id="prizeInfoImg" alt="" style="
+                width:32px;
+                height:32px;
+                border-radius:50%;
+                object-fit:cover;
+                display:none;
+                background:#fff;
+                border:1px solid rgba(15,23,42,.08);
+              ">
+              <span id="prizeInfoName" style="
+                font-size:14px;
+                font-weight:900;
+                color:rgba(15,23,42,.82);
+                line-height:1.2;
+              "></span>
+            </div>
+          </div>
+
+          <div class="midResult" id="resultText" style="text-align:center;">-</div>
+          <div class="hint" id="hint" style="text-align:center;"></div>
+        </div>
+      </div>
+      <div class="wheelArea">
+        <div class="wheelWrap">
+          <div class="needle"></div>
+          <canvas id="wheel" width="720" height="720"></canvas>
+          <button class="centerBtn" id="centerBtn" type="button" aria-label="start stop">
+            <span class="label" id="centerLabel">START</span>
+          </button>
+        </div>
+      </div>
+      <button class="fab" id="btnPrize" title="景品登録" style="display:none; left:14px; right:auto; padding:0; line-height:58px;">景</button>
+      <button class="fab" id="btnPlus" title="項目編集">＋</button>
+    </section>
+  </div>
+  <div class="modalBack" id="modalBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="mh">
+        <div class="t" id="modalTitle">項目編集</div>
+        <button class="x" id="modalClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div style="margin-bottom:12px;">
+          <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">タイトル</div>
+          <input id="titleInput" type="text" placeholder="例）本日の抽選" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+        </div>
+
+        <div id="roomDescriptionBlock" style="margin-bottom:14px;">
+          <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">説明文</div>
+          <textarea id="roomDescriptionInput" style="
+            width:100%;
+            min-height:96px;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+            resize:vertical;
+          "></textarea>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin-top:6px;">
+            ※選択した景品の画像が抽選に使用されます
+          </div>
+          <div style="margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">抽選モード</div>
+            <select id="editDrawMode" style="width:100%; padding:12px; border-radius:12px; border:1px solid rgba(15,23,42,.12); outline:none;">
+              <option value="A">景品1：ユーザー複数</option>
+              <option value="B">ユーザー1：景品複数</option>
+              <option value="C">景品1：口数指定</option>
+            </select>
+          </div>
+          
+          <div id="targetPrizeLabel" style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">項目</div>
+          <select id="targetPrizeSelect" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+            <option value="">項目を選択</option>
+          </select>
+
+        <div id="modeCSettings" style="display:none;">
+          <div style="margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">総口数</div>
+            <input id="editMaxSlots" type="number" value="0" style="width:100%; padding:12px; border-radius:12px; border:1px solid rgba(15,23,42,.12); outline:none;">
+          </div>
+          <div style="margin-bottom:14px;">
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">一人上限</div>
+            <input id="editUserMax" type="number" value="0" style="width:100%; padding:12px; border-radius:12px; border:1px solid rgba(15,23,42,.12); outline:none;">
+          </div>
+        </div>
+
+        <div id="itemListContainer">
+          <div class="rowHead">
+            <span>項目名</span>
+            <span>重み</span>
+            <span>色</span>
+          </div>
+          <div id="itemList" data-type="user" data-role="user-list" data-source="approved-users"></div>
+        </div>
+      </div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="btnAdd">項目を追加</button>
+        <div style="display:flex; gap:10px;">
+          <button class="btn ghost" id="btnCancel">閉じる</button>
+          <button class="btn primary" id="btnSave" data-type="prize-user">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="drawImageViewBack" style="
+    position:fixed;
+    inset:0;
+    background: rgba(15,23,42,.42);
+    display:none;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    z-index:9999;
+  ">
+    <div style="
+      width:min(560px, 92vw);
+      height:min(560px, 92vw);
+      border-radius:22px;
+      overflow:hidden;
+      background:#fff;
+    ">
+      <img id="drawImageViewImg" alt="" style="width:100%; height:100%; object-fit:cover; display:block;">
+    </div>
+  </div>
+  <div class="modalBack" id="prizeBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prizeTitle">
+      <div class="mh">
+        <div class="t" id="prizeTitle">景品登録</div>
+        <button class="x" id="prizeClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div style="display:grid; gap:12px; margin-bottom:16px;">
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">景品名</div>
+            <input id="prizeName" type="text" placeholder="例）Nintendo Switch" style="
+              width:100%;
+              padding:12px 12px;
+              border-radius:12px;
+              border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);
+              font-size:14px;
+              outline:none;
+            ">
+          </div>
+
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">画像（中央で正方形にカットされます）</div>
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+              <div style="
+                width:94px;
+                height:94px;
+                border-radius:18px;
+                border:1px solid rgba(15,23,42,.12);
+                overflow:hidden;
+                background:rgba(15,23,42,.03);
+                flex:0 0 auto;
+                box-shadow: 0 8px 18px rgba(15,23,42,.10);
+              ">
+                <img id="prizeImagePreview" alt="" style="width:100%; height:100%; object-fit:cover; display:block;">
+              </div>
+
+              <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
+                <label for="prizeImageInput" style="
+                  display:flex;
+                  align-items:center;
+                  width:100%;
+                  min-height:44px;
+                  padding:0 14px;
+                  border-radius:12px;
+                  border:1px solid rgba(15,23,42,.12);
+                  background:#fff;
+                  font-size:14px;
+                  color:rgba(15,23,42,.86);
+                  cursor:pointer;
+                ">
+                  ファイルから選択
+                </label>
+                <input id="prizeImageInput" type="file" accept="image/*" style="display:none;">
+
+                <select id="prizeImageSelect" style="
+                  width:100%;
+                  min-height:44px;
+                  padding:0 14px;
+                  border-radius:12px;
+                  border:1px solid rgba(15,23,42,.12);
+                  background:#fff;
+                  font-size:14px;
+                  color:rgba(15,23,42,.86);
+                  outline:none;
+                ">
+                  <option value="">登録画像から選択</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">ポイント数</div>
+            <input id="prizePoint" type="number" min="0" step="1" placeholder="0" style="
+              width:100%;
+              padding:12px 12px;
+              border-radius:12px;
+              border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);
+              font-size:14px;
+              outline:none;
+            ">
+          </div>
+
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">原価</div>
+            <input id="prizeCost" type="number" min="0" step="1" placeholder="0" style="
+              width:100%;
+              padding:12px 12px;
+              border-radius:12px;
+              border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);
+              font-size:14px;
+              outline:none;
+            ">
+          </div>
+
+          <div>
+            <div style="font-size:12px;color:var(--muted);margin:0 0 6px 2px;">ポイント交換率（%）</div>
+            <input id="prizeExchangeRate" type="number" min="0" max="100" step="1" placeholder="0" style="
+              width:100%;
+              padding:12px 12px;
+              border-radius:12px;
+              border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);
+              font-size:14px;
+              outline:none;
+            ">
+          </div>
+        </div>
+
+        <div style="margin-top:6px; padding-top:14px; border-top:1px solid rgba(15,23,42,.10);">
+          <div style="font-size:14px; font-weight:900; margin-bottom:8px;">CSV一括登録</div>
+          <input id="prizeCsvInput" type="file" accept=".csv,text/csv" style="width:100%;">
+          <div style="font-size:12px;color:var(--muted);margin-top:6px;">
+            列順：景品名,ポイント数,原価,ポイント交換率,画像名
+          </div>
+        </div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="prizeCancel">閉じる</button>
+        <div style="display:flex; gap:10px;">
+          <button class="btn ghost" id="prizeCsvSave">CSV登録</button>
+          <button class="btn primary" id="prizeSave">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="modalBack" id="authBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="mh">
+        <div class="t" id="authTitle">ログイン</div>
+        <button class="x" id="authClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="authErr" style="color:#d32f2f; font-size:12px; min-height:16px; margin:0 2px 10px;"></div>
+          <form id="loginForm" style="display:grid; gap:10px;" onsubmit="return false;">
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">メール</div>
+              <input id="loginEmail" type="email" autocomplete="username" placeholder="you@example.com" style="
+                width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+                background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">パスワード</div>
+              <input id="loginPass" type="password" autocomplete="current-password" placeholder="******" style="
+                width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+                background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+            <div style="display:flex; justify-content:flex-end;">
+              <button id="toSignup" type="button" style="border:none;background:transparent;cursor:pointer;font-weight:900;color:rgba(15,23,42,.70);padding:6px 2px;">
+                アカウントがない方はこちら
+              </button>
+            </div>
+          </form>
+        <form id="signupForm" style="display:none; gap:10px;" onsubmit="return false;">
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">メール</div>
+            <input id="signupEmail" type="email" placeholder="you@example.com" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">パスワード</div>
+            <input id="signupPass" type="password" placeholder="******" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">パスワード（確認）</div>
+            <input id="signupPass2" type="password" placeholder="******" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">アカウント種類</div>
+            <select id="signupPlan" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+              <option value="FREE">A.無料：抽選参加者</option>
+              <option value="H100">B.250円/月：主催者(抽選回数100回/月)</option>
+              <option value="H300">C.500円/月：主催者(抽選回数300回/月)</option>
+              <option value="H1000">D.1000円/月：主催者(抽選回数1000回/月)</option>
+              <option value="LIVE">E.2000円/月：D+音声生配信</option>
+              <option value="POINT">F.5000円/月：E+ポイント発行権</option>
+            </select>
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">ニックネーム</div>
+            <input id="signupNick" type="text" placeholder="表示名" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">アイコン</div>
+            <div style="display:flex; gap:10px; align-items:center;">
+              <div style="width:56px; height:56px; border-radius:14px; border:1px solid rgba(15,23,42,.12); overflow:hidden; background:rgba(15,23,42,.03); flex:0 0 auto;">
+                <img id="iconPreview" alt="" style="width:100%; height:100%; object-fit:cover; display:block;">
+              </div>
+              <div style="flex:1;">
+                <input id="signupIcon" type="file" accept="image/*" style="width:100%;">
+                <div style="font-size:12px; color:rgba(15,23,42,.55); margin-top:6px;">256×256に圧縮してWebPに変換されます</div>
+              </div>
+            </div>
+          </div>
+          <div style="padding:10px 12px; border:1px solid rgba(211,50,47,.25); background:rgba(211,50,47,.06); border-radius:12px;">
+            <div style="color:#d32f2f; font-size:12px; font-weight:900;">
+              ※景品を送る際に利用する情報ですので正確にご入力ください。
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">性</div>
+              <input id="shipSei" type="text" placeholder="" style="width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">名</div>
+              <input id="shipMei" type="text" placeholder="" style="width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">セイ</div>
+              <input id="shipSeiKana" type="text" placeholder="" style="width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+            <div>
+              <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">メイ</div>
+              <input id="shipMeiKana" type="text" placeholder="" style="width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">電話番号</div>
+            <input id="shipPhone" type="tel" inputmode="tel" placeholder="090..." style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">郵便番号</div>
+            <input id="shipPostal" type="text" inputmode="numeric" placeholder="1234567" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin-top:6px;">入力後、自動で住所が入ります（入らない場合は手入力）</div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">住所（自動入力）</div>
+            <input id="shipAddrAuto" type="text" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(15,23,42,.03);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">番地以降</div>
+            <input id="shipAddr2" type="text" placeholder="" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div>
+            <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">建物名 部屋番号</div>
+            <input id="shipBuilding" type="text" placeholder="" style="
+              width:100%;padding:12px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.12);
+              background: rgba(255,255,255,.96);font-size:14px;outline:none;">
+          </div>
+          <div style="display:flex; justify-content:flex-end;">
+            <button id="toLogin" type="button" style="border:none;background:transparent;cursor:pointer;font-weight:900;color:rgba(15,23,42,.70);padding:6px 2px;">
+              すでにアカウントがある方はこちら
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="authCancel" type="button">閉じる</button>
+        <button class="btn primary" id="authSubmit" type="button">ログイン</button>
+      </div>
+    </div>
+  </div>
+  <div class="modalBack" id="accountEditBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="accountEditTitle">
+      <div class="mh">
+        <div class="t" id="accountEditTitle">アカウント情報編集</div>
+        <button class="x" id="accountEditClose" aria-label="close">×</button>
+      </div>
+
+      <div class="mb" style="display:grid; gap:12px;">
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">アカウント名</div>
+          <input id="accountEditNick" type="text" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">アカウント画像</div>
+          <div style="display:flex; gap:10px; align-items:center;">
+            <div style="width:56px; height:56px; border-radius:14px; border:1px solid rgba(15,23,42,.12); overflow:hidden; background:rgba(15,23,42,.03); flex:0 0 auto;">
+              <img id="accountEditIconPreview" alt="" style="width:100%; height:100%; object-fit:cover; display:block;">
+            </div>
+            <div style="flex:1;">
+              <input id="accountEditIcon" type="file" accept="image/*" style="width:100%;">
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">説明文</div>
+          <textarea id="accountEditDescription" style="
+            width:100%;
+            min-height:96px;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+            resize:vertical;
+          "></textarea>
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">電話番号</div>
+          <input id="accountEditPhone" type="tel" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">郵便番号</div>
+          <input id="accountEditPostal" type="text" inputmode="numeric" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+        </div>
+
+        <div>
+          <div style="font-size:12px;color:rgba(15,23,42,.55);margin:0 0 6px 2px;">住所</div>
+          <input id="accountEditAddrAuto" type="text" placeholder="都道府県 市区町村" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+            margin-bottom:8px;
+          ">
+          <input id="accountEditAddr2" type="text" placeholder="番地以降" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+            margin-bottom:8px;
+          ">
+          <input id="accountEditBuilding" type="text" placeholder="建物名 部屋番号" style="
+            width:100%;
+            padding:12px 12px;
+            border-radius:12px;
+            border:1px solid rgba(15,23,42,.12);
+            background: rgba(255,255,255,.96);
+            font-size:14px;
+            outline:none;
+          ">
+        </div>
+      </div>
+
+      <div class="mf">
+        <button class="btn ghost" id="accountEditCancel" type="button">閉じる</button>
+        <button class="btn primary" id="accountEditSave" type="button">保存</button>
+      </div>
+    </div>
+  </div>
+  <div class="modalBack" id="entryRequestBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="entryRequestTitle">
+      <div class="mh">
+        <div class="t" id="entryRequestTitle">参加希望者</div>
+        <button class="x" id="entryRequestClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="entryRequestList" class="entryReqList"></div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="entryRequestCancel" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalBack" id="prizeListBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prizeListTitle">
+      <div class="mh">
+        <div class="t" id="prizeListTitle">登録景品一覧</div>
+        <button class="x" id="prizeListClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="prizeListRows"></div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="prizeListCancel" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalBack" id="prizeImageListBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="prizeImageListTitle">
+      <div class="mh">
+        <div class="t" id="prizeImageListTitle">登録画像一覧</div>
+        <button class="x" id="prizeImageListClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="missingImageSection" style="display:none; margin-bottom:16px;">
+          <button class="btn ghost" id="btnOpenMissingImages" type="button" style="width:100%; text-align:left;">
+            不足画像
+            <span id="missingImageSectionCount" style="margin-left:8px; color:#ff3b30; font-weight:900;"></span>
+          </button>
+        </div>
+        <div id="prizeImageListRows"></div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="prizeImageListCancel" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalBack" id="missingImagesBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="missingImagesTitle">
+      <div class="mh">
+        <div class="t" id="missingImagesTitle">不足画像</div>
+        <button class="x" id="missingImagesClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="missingImagesRows" style="margin-bottom:14px;"></div>
+        <div style="display:grid; gap:10px;">
+          <input id="missingImagesInput" type="file" accept="image/*" multiple>
+          <div id="missingDropZone" style="
+            border:2px dashed rgba(15,23,42,.18);
+            border-radius:14px;
+            padding:18px;
+            text-align:center;
+            color:rgba(15,23,42,.58);
+            font-size:13px;
+          ">ここに画像をドロップ</div>
+        </div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="missingImagesCancel" type="button">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modalBack" id="confirmBack">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="confirmTitle" style="width:min(420px, 96vw);">
+      <div class="mh">
+        <div class="t" id="confirmTitle">確認</div>
+        <button class="x" id="confirmClose" aria-label="close">×</button>
+      </div>
+      <div class="mb">
+        <div id="confirmText" style="font-size:14px; color:rgba(15,23,42,.86);"></div>
+      </div>
+      <div class="mf">
+        <button class="btn ghost" id="confirmCancel" type="button">キャンセル</button>
+        <button class="btn primary" id="confirmOk" type="button">削除</button>
+      </div>
+    </div>
+  </div>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut,
+      updateProfile,
+      connectAuthEmulator
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import {
+      getFirestore,
+      doc,
+      getDoc,
+      setDoc,
+      updateDoc,
+      onSnapshot,
+      serverTimestamp,
+      connectFirestoreEmulator,
+      collection,
+      query,
+      where,
+      getDocs,
+      limit
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getStorage,
+      ref,
+      uploadBytes,
+      getDownloadURL,
+      connectStorageEmulator
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+    import {
+      getFunctions,
+      httpsCallable,
+      connectFunctionsEmulator
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyBZDUfNQO6nj0Y-agzpE1oCkYufbMi_Txk",
+      authDomain: "spinfate1.firebaseapp.com",
+      projectId: "spinfate1",
+      storageBucket: "spinfate1.firebasestorage.app",
+      messagingSenderId: "503992322554",
+      appId: "1:503992322554:web:2b5397e6c44411eb23fc43",
+      measurementId: "G-KDHKCTNEHP"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+    const fn = getFunctions(app, "us-central1");
+
+    const isLocal =
+      location.hostname === "127.0.0.1" ||
+      location.hostname === "localhost";
+
+    if (isLocal) {
+      connectAuthEmulator(auth, "http://127.0.0.1:9099");
+      connectFirestoreEmulator(db, "127.0.0.1", 8080);
+      connectStorageEmulator(storage, "127.0.0.1", 9199);
+      connectFunctionsEmulator(fn, "127.0.0.1", 5001);
+    }
+
+    const roomUid = (() => {
+      const m = location.pathname.match(/^\/(?:room|host)\/([^/]+)/);
+      return m ? decodeURIComponent(m[1]) : "";
+    })();
+    const isRoomPage = location.pathname.startsWith("/room/");
+    const isHostPage = location.pathname.startsWith("/host/");
+
+    const dom = {
+      wheel: document.getElementById("wheel"),
+      centerBtn: document.getElementById("centerBtn"),
+      centerLabel: document.getElementById("centerLabel"),
+      resultText: document.getElementById("resultText"),
+      hint: document.getElementById("hint"),
+      titleText: document.getElementById("titleText"),
+      roomNameLabel: document.getElementById("roomNameLabel"),
+      roomHostIcon: document.getElementById("roomHostIcon"),
+      drawImageThumb: document.getElementById("drawImageThumb"),
+      spinRemainingMini: document.getElementById("spinRemainingMini"),
+      entryRequestBtn: document.getElementById("entryRequestBtn"),
+      entryRequestIcon: document.getElementById("entryRequestIcon"),
+
+      descWrap: document.getElementById("descWrap"),
+      descText: document.getElementById("descText"),
+      descToggle: document.getElementById("descToggle"),
+
+      btnPlus: document.getElementById("btnPlus"),
+      btnPrize: document.getElementById("btnPrize"),
+
+      modalBack: document.getElementById("modalBack"),
+      modalClose: document.getElementById("modalClose"),
+      btnCancel: document.getElementById("btnCancel"),
+      btnSave: document.getElementById("btnSave"),
+      btnAdd: document.getElementById("btnAdd"),
+      itemList: document.getElementById("itemList"),
+      targetPrizeSelect: document.getElementById("targetPrizeSelect"),
+      titleInput: document.getElementById("titleInput"),
+      roomDescriptionBlock: document.getElementById("roomDescriptionBlock"),
+      roomDescriptionInput: document.getElementById("roomDescriptionInput"),
+
+      drawImageViewBack: document.getElementById("drawImageViewBack"),
+      drawImageViewImg: document.getElementById("drawImageViewImg"),
+
+      btnLogin: document.getElementById("btnLogin"),
+      userBox: document.getElementById("userBox"),
+      userIcon: document.getElementById("userIcon"),
+      userTag: document.getElementById("userTag"),
+      btnGoRoom: document.getElementById("btnGoRoom"),
+      btnEntryRequestsHost: document.getElementById("btnEntryRequestsHost"),
+      entryRequestHostBadge: document.getElementById("entryRequestHostBadge"),
+      accountMenuBtn: document.getElementById("accountMenuBtn"),
+      accountMenu: document.getElementById("accountMenu"),
+      btnLogout: document.getElementById("btnLogout"),
+      btnAccountEdit: document.getElementById("btnAccountEdit"),
+      btnPrizeList: document.getElementById("btnPrizeList"),
+      btnPrizeImageList: document.getElementById("btnPrizeImageList"),
+      missingImageCount: document.getElementById("missingImageCount"),
+
+      authBack: document.getElementById("authBack"),
+      authClose: document.getElementById("authClose"),
+      authCancel: document.getElementById("authCancel"),
+      authSubmit: document.getElementById("authSubmit"),
+      authTitle: document.getElementById("authTitle"),
+      authErr: document.getElementById("authErr"),
+      loginForm: document.getElementById("loginForm"),
+      signupForm: document.getElementById("signupForm"),
+      toSignup: document.getElementById("toSignup"),
+      toLogin: document.getElementById("toLogin"),
+      loginEmail: document.getElementById("loginEmail"),
+      loginPass: document.getElementById("loginPass"),
+      signupEmail: document.getElementById("signupEmail"),
+      signupPass: document.getElementById("signupPass"),
+      signupPass2: document.getElementById("signupPass2"),
+      signupPlan: document.getElementById("signupPlan"),
+      signupNick: document.getElementById("signupNick"),
+      signupIcon: document.getElementById("signupIcon"),
+      iconPreview: document.getElementById("iconPreview"),
+      shipSei: document.getElementById("shipSei"),
+      shipMei: document.getElementById("shipMei"),
+      shipSeiKana: document.getElementById("shipSeiKana"),
+      shipMeiKana: document.getElementById("shipMeiKana"),
+      shipPhone: document.getElementById("shipPhone"),
+      shipPostal: document.getElementById("shipPostal"),
+      shipAddrAuto: document.getElementById("shipAddrAuto"),
+      shipAddr2: document.getElementById("shipAddr2"),
+      shipBuilding: document.getElementById("shipBuilding"),
+
+      accountEditBack: document.getElementById("accountEditBack"),
+      accountEditClose: document.getElementById("accountEditClose"),
+      accountEditCancel: document.getElementById("accountEditCancel"),
+      accountEditSave: document.getElementById("accountEditSave"),
+      accountEditNick: document.getElementById("accountEditNick"),
+      accountEditIcon: document.getElementById("accountEditIcon"),
+      accountEditIconPreview: document.getElementById("accountEditIconPreview"),
+      accountEditDescription: document.getElementById("accountEditDescription"),
+      accountEditPhone: document.getElementById("accountEditPhone"),
+      accountEditPostal: document.getElementById("accountEditPostal"),
+      accountEditAddrAuto: document.getElementById("accountEditAddrAuto"),
+      accountEditAddr2: document.getElementById("accountEditAddr2"),
+      accountEditBuilding: document.getElementById("accountEditBuilding"),
+
+      entryRequestBack: document.getElementById("entryRequestBack"),
+      entryRequestClose: document.getElementById("entryRequestClose"),
+      entryRequestCancel: document.getElementById("entryRequestCancel"),
+      entryRequestList: document.getElementById("entryRequestList"),
+
+      prizeBack: document.getElementById("prizeBack"),
+      prizeClose: document.getElementById("prizeClose"),
+      prizeCancel: document.getElementById("prizeCancel"),
+      prizeSave: document.getElementById("prizeSave"),
+      prizeCsvSave: document.getElementById("prizeCsvSave"),
+      prizeName: document.getElementById("prizeName"),
+
+      prizeImageInput: document.getElementById("prizeImageInput"),
+      prizeImageSelect: document.getElementById("prizeImageSelect"),
+      prizeImagePreview: document.getElementById("prizeImagePreview"),
+      prizePoint: document.getElementById("prizePoint"),
+
+      prizeCost: document.getElementById("prizeCost"),
+      prizeExchangeRate: document.getElementById("prizeExchangeRate"),
+      prizeCsvInput: document.getElementById("prizeCsvInput"),
+
+      prizeListBack: document.getElementById("prizeListBack"),
+      prizeListClose: document.getElementById("prizeListClose"),
+      prizeListCancel: document.getElementById("prizeListCancel"),
+      prizeListRows: document.getElementById("prizeListRows"),
+
+      prizeImageListBack: document.getElementById("prizeImageListBack"),
+      prizeImageListClose: document.getElementById("prizeImageListClose"),
+      prizeImageListCancel: document.getElementById("prizeImageListCancel"),
+      prizeImageListRows: document.getElementById("prizeImageListRows"),
+      missingImageSection: document.getElementById("missingImageSection"),
+      missingImageSectionCount: document.getElementById("missingImageSectionCount"),
+      btnOpenMissingImages: document.getElementById("btnOpenMissingImages"),
+
+      missingImagesBack: document.getElementById("missingImagesBack"),
+      missingImagesClose: document.getElementById("missingImagesClose"),
+      missingImagesCancel: document.getElementById("missingImagesCancel"),
+      missingImagesRows: document.getElementById("missingImagesRows"),
+      missingImagesInput: document.getElementById("missingImagesInput"),
+      missingDropZone: document.getElementById("missingDropZone"),
+
+      confirmBack: document.getElementById("confirmBack"),
+      confirmClose: document.getElementById("confirmClose"),
+      confirmCancel: document.getElementById("confirmCancel"),
+      confirmOk: document.getElementById("confirmOk"),
+      confirmText: document.getElementById("confirmText"),
+
+      replacePrizeImageInput: document.getElementById("replacePrizeImageInput"),
+
+      prizeInfo: document.getElementById("prizeInfo"),
+      prizeInfoImg: document.getElementById("prizeInfoImg"),
+      prizeInfoName: document.getElementById("prizeInfoName")
+    };
+
+    const ctx = dom.wheel.getContext("2d");
+
+    const state = {
+      me: null,
+      myProfile: null,
+      room: null,
+      items: [],
+      roomUnsub: null,
+      myProfileUnsub: null,
+      myEntryRequestUnsub: null,
+      authMode: "login",
+      entryRequestStatus: 0,
+      descExpanded: false,
+      signupIconFile: null,
+      accountEditIconFile: null,
+      prizeImageFile: null,
+      repeatConfirmNeeded: true,
+      prizeMasters: [],
+      prizeImages: [],
+      missingPrizeImages: [],
+      approvedUsers: [],
+      pendingConfirm: null,
+      replaceTargetImageName: "",
+      wheel: {
+        status: "idle",
+        angle: 0,
+        target: 0,
+        settling: false,
+        rafId: 0,
+        stopHandledAtPhase2: false
+      }
+    };
+
+    const saveRoomConfigFn = httpsCallable(fn, "saveRoomConfig");
+    const startRoomSpinFn = httpsCallable(fn, "startRoomSpin");
+    const stopRoomSpinFn = httpsCallable(fn, "stopRoomSpin");
+    const finishRoomSpinFn = httpsCallable(fn, "finishRoomSpin");
+    const requestEntryApprovalFn = httpsCallable(fn, "requestEntryApproval");
+    const reviewEntryApprovalFn = httpsCallable(fn, "reviewEntryApproval");
+    const savePrizeMasterFn = httpsCallable(fn, "savePrizeMaster");
+    const addMissingPrizeImageFn = httpsCallable(fn, "addMissingPrizeImage");
+    const clearMissingPrizeImageFn = httpsCallable(fn, "clearMissingPrizeImage");
+    const listPrizeMastersFn = httpsCallable(fn, "listPrizeMasters");
+    const deletePrizeMasterFn = httpsCallable(fn, "deletePrizeMaster");
+    const listPrizeImagesFn = httpsCallable(fn, "listPrizeImages");
+    const deletePrizeImageFn = httpsCallable(fn, "deletePrizeImage");
+    const listMissingPrizeImagesFn = httpsCallable(fn, "listMissingPrizeImages");
+    const applyPrizeImageFn = httpsCallable(fn, "applyPrizeImage");
+    const updateRoomIndexFn = httpsCallable(fn, "updateRoomIndex");
+
+    function isHost() {
+      if (!state.me) return false;
+      if (!isHostPage) return false;
+      return state.me.uid === roomUid;
+    }
+
+    function isFreePlan() {
+      return String(state.myProfile?.plan || "FREE") === "FREE";
+    }
+
+    async function canParticipantStopRoom() {
+      if (!state.me || !isRoomPage || isHost()) return false;
+
+      const q = query(
+        collection(db, "joining"),
+        where("hostUid", "==", roomUid),
+        where("status", "==", 2)
+      );
+
+      const snap = await getDocs(q);
+      return (
+        snap.size === 1 &&
+        String(snap.docs[0].data()?.participantUid || "") === state.me.uid
+      );
+    }
+
+    function parseList(raw) {
+      try {
+        const v = typeof raw === "string" ? JSON.parse(raw || "[]") : raw;
+        if (!Array.isArray(v)) return [];
+        return v
+          .map((row) => {
+            if (!Array.isArray(row)) return null;
+            return [
+              String(row[0] ?? "").trim(),
+              Math.max(1, Number(row[1] ?? 1) || 1),
+              String(row[2] ?? "#cccccc")
+            ];
+          })
+          .filter((x) => x && x[0]);
+      } catch {
+        return [];
+      }
+    }
+
+    function stringifyList(list) {
+      return JSON.stringify(
+        list.map((x) => [
+          String(x[0] ?? "").trim(),
+          Math.max(1, Number(x[1] ?? 1) || 1),
+          String(x[2] ?? "#cccccc")
+        ])
+      );
+    }
+
+    function clampIndex(index, items) {
+      if (!Array.isArray(items) || items.length === 0) return -1;
+      const n = Number(index);
+      if (!Number.isInteger(n)) return -1;
+      if (n < 0 || n >= items.length) return -1;
+      return n;
+    }
+
+    function normalizeAngle(rad) {
+      const two = Math.PI * 2;
+      let v = Number(rad || 0) % two;
+      if (v < 0) v += two;
+      return v;
+    }
+
+    function weightedTotal(items) {
+      return items.reduce((s, x) => s + Math.max(1, Number(x[1] || 1)), 0);
+    }
+
+    const ITEM_COLORS = [
+      "#A7F3D0",
+      "#BFDBFE",
+      "#FBCFE8",
+      "#FDE68A",
+      "#C7D2FE",
+      "#F9A8D4",
+      "#FDBA74",
+      "#86EFAC",
+      "#93C5FD"
+    ];
+
+    function getNextItemColor(index) {
+      return ITEM_COLORS[index % ITEM_COLORS.length];
+    }
+
+    function pickWeightedIndex(items) {
+      if (!Array.isArray(items) || !items.length) return -1;
+
+      const total = items.reduce((s, x) => s + Math.max(1, Number(x[1] || 1)), 0);
+      let r = Math.random() * total;
+
+      for (let i = 0; i < items.length; i++) {
+        r -= Math.max(1, Number(items[i][1] || 1));
+        if (r < 0) return i;
+      }
+
+      return items.length - 1;
+    }
+
+    function calcFinalAngleForIndex(items, index, offsetRatio = 0.5) {
+      if (!items.length || index < 0 || index >= items.length) return 0;
+
+      const total = weightedTotal(items);
+      let a = -Math.PI / 2;
+
+      for (let i = 0; i < items.length; i++) {
+        const span = (Math.max(1, Number(items[i][1] || 1)) / total) * Math.PI * 2;
+
+        if (i === index) {
+          const ratio = Math.max(0.08, Math.min(0.92, Number(offsetRatio || 0.5)));
+          const hit = a + span * ratio;
+          return normalizeAngle(-Math.PI / 2 - hit);
+        }
+
+        a += span;
+      }
+    }
+
+    function calcTargetAngleFromCurrent(current, finalAngle, spins = 2) {
+      const cur = normalizeAngle(current);
+      const fin = normalizeAngle(finalAngle);
+      let delta = fin - cur;
+      if (delta < 0) delta += Math.PI * 2;
+      return current + delta + spins * Math.PI * 2;
+    }
+
+    function easeOutCubic(t) {
+      return 1 - Math.pow(1 - t, 3);
+    }
+
+    function stopRaf() {
+      if (state.wheel.rafId) {
+        cancelAnimationFrame(state.wheel.rafId);
+        state.wheel.rafId = 0;
+      }
+    }
+
+    function scheduleTick() {
+      if (state.wheel.rafId) return;
+      state.wheel.rafId = requestAnimationFrame(tick);
+    }
+
+    function tick() {
+      state.wheel.rafId = 0;
+
+      if (state.wheel.status === "spinning") {
+        state.wheel.angle += 0.26;
+        dom.resultText.textContent = "抽選中...";
+        drawWheel();
+        scheduleTick();
+        return;
+      }
+
+      if (state.wheel.status === "settling") {
+        const w = state.wheel;
+
+        if (w.targetAngle == null && state.room?.angle != null) {
+          w.startAngle = state.wheel.angle;
+          w.targetAngle = calcTargetAngleFromCurrent(
+            w.startAngle,
+            Number(state.room.angle || 0),
+            2
+          );
+          w.t = 0;
+        }
+
+        w.t = (w.t || 0) + 1;
+        const duration = 160;
+        let p = w.t / duration;
+        if (p > 1) p = 1;
+        const e = easeOutCubic(p);
+        w.angle = w.startAngle + (w.targetAngle - w.startAngle) * e;
+        drawWheel();
+
+        if (p < 1) {
+          scheduleTick();
+          return;
+        }
+
+        w.status = "idle";
+        w.angle = normalizeAngle(w.targetAngle);
+
+        if (!isRoomPage && !isHostPage) {
+          const nextIndex = pickWeightedIndex(state.items);
+
+          renderRoom({
+            ...(state.room || {}),
+            phase: 0,
+            angle: w.angle,
+            indexview: state.room.index,
+          });
+          return;
+        }
+
+        drawWheel();
+
+        if (isHost() && state.room && Number(state.room.phase) === 2 && !state.wheel.finishedCalled) {
+          state.wheel.finishedCalled = true;
+          finishRoomSpin({ roomUid }).catch(console.error);
+        }
+        return;
+      }
+
+      drawWheel();
+    }
+
+    function drawWheel() {
+      const W = dom.wheel.width;
+      const H = dom.wheel.height;
+      const cx = W / 2;
+      const cy = H / 2;
+      const R = Math.min(W, H) * 0.46;
+
+      ctx.clearRect(0, 0, W, H);
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(state.wheel.angle);
+
+      const items = state.items;
+      if (!items.length) {
+        ctx.beginPath();
+        ctx.arc(0, 0, R, 0, Math.PI * 2);
+        ctx.fillStyle = "#f3f4f6";
+        ctx.fill();
+        ctx.restore();
+        return;
+      }
+
+      const total = weightedTotal(items);
+      let a = -Math.PI / 2;
+
+      for (const item of items) {
+        const span = (Math.max(1, Number(item[1] || 1)) / total) * Math.PI * 2;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, R, a, a + span);
+        ctx.closePath();
+        ctx.fillStyle = item[2] || "#cccccc";
+        ctx.fill();
+
+        ctx.save();
+        ctx.rotate(a + span / 2);
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#111";
+        ctx.font = "bold 20px sans-serif";
+        ctx.fillText(String(item[0] || ""), R - 20, 0);
+        ctx.restore();
+
+        a += span;
+      }
+
+      ctx.restore();
+    }
+
+    function setCenterButtonByState() {
+      if (state.wheel.status === "spinning") {
+        dom.centerLabel.textContent = "STOP";
+        dom.centerBtn.classList.add("stop");
+        return;
+      }
+      dom.centerLabel.textContent = "START";
+      dom.centerBtn.classList.remove("stop");
+    }
+
+    function setImage(el, url) {
+      if (!url) {
+        el.removeAttribute("src");
+        el.style.display = "none";
+        return;
+      }
+      el.src = url;
+      el.style.display = "block";
+    }
+
+    function renderDescription() {
+      if (!isRoomPage && !isHostPage) {
+        dom.descWrap.style.display = "none";
+        dom.descText.innerHTML = "";
+        dom.descToggle.style.display = "none";
+        return;
+      }
+      const text = String(state.room?.description || "");
+      if (!text) {
+        dom.descWrap.style.display = "none";
+        dom.descText.innerHTML = "";
+        dom.descToggle.style.display = "none";
+        return;
+      }
+
+      dom.descWrap.style.display = "block";
+      dom.descText.innerHTML = escapeHtml(text).replace(/\n/g, "<br>");
+      dom.descText.style.webkitLineClamp = state.descExpanded ? "unset" : "2";
+      dom.descText.style.lineClamp = state.descExpanded ? "unset" : "2";
+      dom.descText.style.overflow = state.descExpanded ? "visible" : "hidden";
+
+      requestAnimationFrame(() => {
+        const over = dom.descText.scrollHeight > dom.descText.clientHeight + 2;
+        dom.descToggle.style.display = over || state.descExpanded ? "block" : "none";
+        dom.descToggle.textContent = state.descExpanded ? "△" : "▽";
+      });
+    }
+
+    function renderRemaining() {
+      if (!state.myProfile || isFreePlan() || !isHostPage || !isHost()) {
+        dom.spinRemainingMini.style.display = "none";
+        dom.spinRemainingMini.textContent = "";
+        return;
+      }
+
+      const limit = Math.max(0, Number(state.myProfile.limit || 0));
+      const used = Math.max(0, Number(state.myProfile.usageUsed || 0));
+      const remain = Math.max(0, limit - used);
+
+      dom.spinRemainingMini.style.display = "block";
+      dom.spinRemainingMini.textContent = `残り ${remain} 回`;
+    }
+
+    function renderUser() {
+      if (!state.me) {
+        dom.btnLogin.style.display = "inline-flex";
+        dom.userBox.style.display = "none";
+        dom.btnGoRoom.style.display = "none";
+        dom.btnPrizeList.style.display = "none";
+        dom.btnPrizeImageList.style.display = "none";
+        return;
+      }
+
+      dom.btnLogin.style.display = "none";
+      dom.userBox.style.display = "flex";
+
+      const nick = state.myProfile?.nick || state.me.displayName || "USER";
+      dom.userTag.textContent = nick;
+
+      const iconUrl = state.myProfile?.iconUrl || state.me.photoURL || "";
+      if (iconUrl) {
+        dom.userIcon.src = iconUrl;
+        dom.userIcon.style.display = "block";
+      } else {
+        dom.userIcon.removeAttribute("src");
+        dom.userIcon.style.display = "none";
+      }
+
+      dom.btnGoRoom.style.display = isFreePlan() ? "none" : "inline-flex";
+      dom.btnGoRoom.textContent = (isRoomPage || isHostPage) ? "TOP" : "HOST";
+
+      const isHostAdminPage = !isFreePlan() && isHostPage && isHost();
+      const isTopPage = !isRoomPage && !isHostPage;
+      const canEditItems = isTopPage || (!isFreePlan() && isHostPage && isHost());
+
+      dom.btnPrize.style.display = isHostAdminPage ? "inline-flex" : "none";
+      dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none";
+      dom.btnPrizeList.style.display = isHostAdminPage ? "block" : "none";
+      dom.btnPrizeImageList.style.display = isHostAdminPage ? "flex" : "none";
+
+      renderEntryRequestUi();
+    }
+
+    function renderRoom(room) {
+      state.room = room;
+      state.items = parseList(room.list);
+
+      dom.titleText.textContent = room.title || "タイトル";
+      dom.roomNameLabel.textContent = room.hostNick ? `${room.hostNick}ルーム` : "";
+      setImage(dom.roomHostIcon, room.hostIconUrl || "");
+      renderDescription();
+
+      const indexView = clampIndex(room.indexview, state.items);
+      if (state.wheel.status !== "spinning") {
+        dom.resultText.textContent =
+          indexView >= 0 && state.items[indexView] ? state.items[indexView][0] : "-";
+      }
+
+      const phase = Number(room.phase || 0);
+
+      if (phase === 0) {
+        state.wheel.status = "idle";
+        state.wheel.angle = normalizeAngle(Number(room.angle || 0));
+        state.wheel.stopHandledAtPhase2 = false;
+        stopRaf();
+        drawWheel();
+      } else if (phase === 1) {
+        if (state.wheel.status !== "spinning") {
+          state.wheel.status = "spinning";
+          state.wheel.stopHandledAtPhase2 = false;
+          scheduleTick();
+        }
+      } else if (phase === 2) {
+        if (!state.wheel.stopHandledAtPhase2) {
+          state.wheel.status = "settling";
+          state.wheel.startAngle = state.wheel.angle;
+          state.wheel.targetAngle = calcTargetAngleFromCurrent(
+            state.wheel.angle,
+            Number(room.angle || 0),
+            2
+          );
+          state.wheel.t = 0;
+          state.wheel.stopHandledAtPhase2 = true;
+          scheduleTick();
+        }
+      }
+
+      setCenterButtonByState();
+      renderRemaining();
+      renderEntryRequestUi();
+      renderPrizeInfo();
+    }
+
+    function openModal(el) {
+      if (el) el.style.display = "flex";
+    }
+
+    function closeModal(el) {
+      if (el) el.style.display = "none";
+    }
+
+    function closeAllMenus() {
+      dom.accountMenu.style.display = "none";
+    }
+
+    function makeItemRow(name = "", weight = 1, color = null, mode = "A") {
+      const isTopPage = !isRoomPage && !isHostPage; // トップページ判定
+      color = color || getNextItemColor(dom.itemList.querySelectorAll(".itemRow").length);
+      
+      const row = document.createElement("div");
+      row.className = "itemRow";
+      
+      // HTML構造の分岐
+      let inputHtml = isTopPage 
+        ? `<input type="text" class="itemName" placeholder="項目名" value="${escapeHtml(name)}">`
+        : `<select class="itemSelect"></select>`;
+
+      row.innerHTML = `
+        ${inputHtml}
+        <input type="number" class="itemWeight" min="1" step="1" value="${Number(weight || 1)}">
+        <button type="button" class="swatch" style="background:${escapeHtml(color)};"></button>
+        <input type="color" class="itemColor" value="${escapeHtml(color)}">
+        <button type="button" class="del">×</button>
+      `;
+
+      // DB連携ページの場合のみセレクトボックスに値を流し込む
+      if (!isTopPage) {
+        const sel = row.querySelector(".itemSelect");
+        sel.innerHTML = `<option value=""></option>`;
+        const cSrc = (mode === "A") ? state.approvedUsers : state.prizeMasters;
+        cSrc.forEach(c => {
+          const opt = document.createElement("option");
+          opt.value = (mode === "A" ? c.participantUid : c.id);
+          opt.textContent = (mode === "A" ? c.nick : c.name);
+          sel.appendChild(opt);
+        });
+        if (name) {
+          const hit = cSrc.find(c => String((mode === "A" ? c.nick : c.name) || "") === String(name));
+          if (hit) sel.value = (mode === "A" ? hit.participantUid : hit.id);
+        }
+      }
+
+      const swatch = row.querySelector(".swatch");
+      const colorInput = row.querySelector(".itemColor");
+      const delBtn = row.querySelector(".del");
+
+      swatch.addEventListener("click", () => colorInput.click());
+      colorInput.addEventListener("input", () => { swatch.style.background = colorInput.value; });
+      delBtn.addEventListener("click", () => row.remove());
+
+      return row;
+    }
+
+    function escapeHtml(s) {
+      return String(s)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
+
+    function normalizeImageKey(name) {
+      const base = String(name || "")
+        .trim()
+        .toLowerCase()
+        .replace(/\.[^.]+$/, "")
+        .replace(/\.$/, "");
+      if (/[\\/:*?"<>|_]/.test(base)) {
+        throw new Error("画像名に使用できない文字が含まれています");
+      }
+      return base;
+    }
+
+    function fillItemEditorFromRoom() {
+      const room = state.room || {};
+      const isTopPage = !isRoomPage && !isHostPage;
+
+      dom.titleInput.value = room.title || "";
+      dom.roomDescriptionInput.value = room.description || "";
+      const prizeNote = [...dom.modalBack.querySelectorAll('div')].find(el => el.textContent.trim() === "※選択した景品の画像が抽選に使用されます");
+      if (prizeNote) prizeNote.style.display = isTopPage ? "none" : "block";
+      
+      // 説明文ブロックとモード選択の制御
+      dom.roomDescriptionBlock.style.display = isTopPage ? "none" : "block";
+      const editDrawModeEl = document.getElementById("editDrawMode");
+      const mode = editDrawModeEl.value = room.drawMode || "A";
+
+      if (isTopPage) {
+        // トップページなら全て隠す
+        editDrawModeEl.closest('div').style.display = "none";
+        document.getElementById("targetPrizeLabel").style.display = "none"; // 注釈もここで隠れます
+        dom.targetPrizeSelect.style.display = "none";
+        document.getElementById("modeCSettings").style.display = "none";
+        dom.btnSave.disabled = false; 
+      } else {
+        // ルーム・ホストページ用の表示ロジック
+        editDrawModeEl.closest('div').style.display = "block";
+        refreshPrizeAdminData(); 
+      }
+
+      // 項目リスト生成
+      dom.itemList.innerHTML = "";
+      const items = parseList(room.list);
+      if (items.length) {
+        items.forEach((x) => dom.itemList.appendChild(makeItemRow(x[0], x[1], x[2], mode)));
+      } else {
+        dom.itemList.appendChild(makeItemRow("", 1, getNextItemColor(0), mode));
+      }
+    }
+
+    function readItemsFromEditor() {
+      const rows = [...dom.itemList.querySelectorAll(".itemRow")];
+      const isTopPage = !isRoomPage && !isHostPage;
+      
+      return rows.map((row) => {
+        let name = isTopPage 
+          ? row.querySelector(".itemName")?.value.trim() || ""
+          : row.querySelector(".itemSelect")?.selectedOptions?.[0]?.textContent?.trim() || "";
+        
+        const weight = Math.max(1, Number(row.querySelector(".itemWeight")?.value || 1) || 1);
+        const color = row.querySelector(".itemColor")?.value || "#cccccc";
+        return name ? [name, weight, color] : null;
+      }).filter(Boolean);
+    }
+
+    async function uploadImageFile(file, path) {
+      if (!file) return "";
+
+      const img = await new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const image = new Image();
+        image.onload = () => {
+          URL.revokeObjectURL(url);
+          resolve(image);
+        };
+        image.onerror = reject;
+        image.src = url;
+      });
+
+      const canvas = document.createElement("canvas");
+      const size = 256;
+      canvas.width = size;
+      canvas.height = size;
+
+      const ctx = canvas.getContext("2d");
+      ctx.clearRect(0, 0, size, size);
+
+      const sw = img.width;
+      const sh = img.height;
+      const srcSize = Math.min(sw, sh);
+      const sx = (sw - srcSize) / 2;
+      const sy = (sh - srcSize) / 2;
+
+      ctx.drawImage(img, sx, sy, srcSize, srcSize, 0, 0, size, size);
+
+      const blob = await new Promise((resolve) => {
+        canvas.toBlob(resolve, "image/webp", 0.9);
+      });
+
+      if (!blob) {
+        throw new Error("画像変換に失敗しました");
+      }
+
+      const storageRef = ref(storage, path);
+      await uploadBytes(storageRef, blob, { contentType: "image/webp" });
+      return await getDownloadURL(storageRef);
+    }
+
+    async function ensureHostRoom() {
+      if (!state.me || !isHost()) return;
+      const roomRef = doc(db, "rooms", state.me.uid);
+      const snap = await getDoc(roomRef);
+      if (snap.exists()) return;
+
+      // Firestore SDK(setDoc)ではなく、完成済みのCallableを通じて初期化を行う
+      try {
+        await saveRoomConfig({
+          roomUid: state.me.uid,
+          title: "タイトル",
+          description: "",
+          list: JSON.stringify([
+            ["A", 1, "#A7F3D0"],
+            ["B", 1, "#BFDBFE"],
+            ["C", 1, "#FBCFE8"],
+          ]),
+          targetPrizeId: "",
+          point: 0,
+          drawMode: "A",
+          maxSlots: 0,
+          userMax: 0
+        });
+      } catch (e) {
+        console.error("Room initialization failed:", e);
+      }
+    }
+
+    function applyLocalDefaultRoom() {
+      renderRoom({
+        angle: 0,
+        hostIconUrl: "",
+        hostNick: "",
+        imageUrl: "",
+        list: JSON.stringify([
+          ["A", 1, "#A7F3D0"],
+          ["B", 1, "#BFDBFE"],
+          ["C", 1, "#FBCFE8"],
+        ]),
+        phase: 0,
+        index: -1,
+        indexview: -1,
+        title: "タイトル",
+        point: 0
+      });
+    }
+
+    function subscribeRoom() {
+      if (state.roomUnsub) {
+        state.roomUnsub();
+        state.roomUnsub = null;
+      }
+
+      if (!isRoomPage && !isHostPage) {
+        applyLocalDefaultRoom();
+        return;
+      }
+
+      state.roomUnsub = onSnapshot(doc(db, "rooms", roomUid), (snap) => {
+        if (!snap.exists()) {
+          applyLocalDefaultRoom();
+          return;
+        }
+        renderRoom(snap.data());
+      });
+    }
+
+    function subscribeMyProfile(uid) {
+      if (typeof state.myProfileUnsub === "function") state.myProfileUnsub();
+      state.myProfileUnsub = onSnapshot(doc(db, "spinfate_profiles", uid), (snap) => {
+        state.myProfile = snap.exists() ? { uid, ...snap.data() } : null;
+        renderUser();
+        renderRemaining();
+      });
+    }
+
+    function setAuthMode(mode) {
+      state.authMode = mode;
+      const isLogin = mode === "login";
+      dom.authTitle.textContent = isLogin ? "ログイン" : "アカウント作成";
+      dom.authSubmit.textContent = isLogin ? "ログイン" : "作成";
+      dom.loginForm.style.display = isLogin ? "grid" : "none";
+      dom.signupForm.style.display = isLogin ? "none" : "grid";
+      dom.authErr.textContent = "";
+    }
+
+    function getEntryRequestIconSrc(status) {
+      if (status === 1) return "/img/i1.jpg";
+      if (status === 2) return "/img/i2.jpg";
+      if (status === 3) return "/img/i3.jpg";
+      return "/img/i0.jpg";
+    }
+
+    function renderEntryRequestList() {
+      const rows = Array.isArray(state.pendingEntryRequests) ? state.pendingEntryRequests : [];
+
+      if (!rows.length) {
+        dom.entryRequestList.innerHTML = `<div class="entryEmpty">申請中の参加者はいません</div>`;
+        return;
+      }
+
+      dom.entryRequestList.innerHTML = rows.map((row) => `
+        <div class="entryReqRow">
+          <div class="entryReqLeft">
+            <img src="${escapeHtml(row.iconUrl || "")}" alt="">
+            <div class="entryReqNick">${escapeHtml(row.nick || "NO NAME")}</div>
+          </div>
+          <div class="entryReqActions">
+            <button class="entryOkBtn" type="button" data-act="ok" data-uid="${escapeHtml(row.participantUid)}">OK</button>
+            <button class="entryNgBtn" type="button" data-act="ng" data-uid="${escapeHtml(row.participantUid)}">NG</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    dom.entryRequestList.addEventListener("click", async (e) => {
+      const btn = e.target.closest("button[data-act][data-uid]");
+      if (!btn) return;
+
+      if (!isHostPage || !isHost()) return;
+
+      const act = String(btn.dataset.act || "");
+      const targetUid = String(btn.dataset.uid || "");
+      if (!targetUid) return;
+
+      btn.disabled = true;
+
+      try {
+        await reviewEntryApproval({
+          roomUid,
+          targetUid,
+          status: act === "ok" ? 2 : 3
+        });
+      } catch (err) {
+        alert(err?.message || "参加申請の更新に失敗しました");
+        btn.disabled = false;
+      }
+    });
+
+    function renderEntryRequestUi() {
+      const isRoomParticipant = isRoomPage && state.me && !isHost();
+
+      if (!isRoomParticipant) {
+        dom.entryRequestBtn.style.display = "none";
+      } else {
+        const status = Number(state.entryRequestStatus || 0);
+        dom.entryRequestBtn.style.display = "inline-flex";
+        dom.entryRequestIcon.src = getEntryRequestIconSrc(status);
+        dom.entryRequestBtn.disabled = status === 1 || status === 2;
+        dom.entryRequestBtn.style.cursor = (status === 1 || status === 2) ? "default" : "pointer";
+      }
+
+      const isHostManagerPage = isHostPage && state.me && isHost();
+      if (!isHostManagerPage) {
+        dom.btnEntryRequestsHost.style.display = "none";
+        dom.entryRequestHostBadge.style.display = "none";
+        return;
+      }
+
+      const count = Array.isArray(state.pendingEntryRequests) ? state.pendingEntryRequests.length : 0;
+
+      dom.btnEntryRequestsHost.style.display = count > 0 ? "inline-flex" : "none";
+      dom.entryRequestHostBadge.style.display = count > 0 ? "block" : "none";
+      dom.entryRequestHostBadge.textContent = String(count);
+
+      renderEntryRequestList();
+    }
+
+    function subscribeMyEntryRequest() {
+      if (state.myEntryRequestUnsub) {
+        state.myEntryRequestUnsub();
+        state.myEntryRequestUnsub = null;
+      }
+
+      state.entryRequestStatus = 0;
+
+      if (!isRoomPage || !state.me || isHost()) {
+        renderEntryRequestUi();
+        return;
+      }
+
+      const q = query(
+        collection(db, "joining"),
+        where("hostUid", "==", roomUid),
+        where("participantUid", "==", state.me.uid),
+        limit(1)
+      );
+
+      state.myEntryRequestUnsub = onSnapshot(q, (snap) => {
+        if (snap.empty) {
+          state.entryRequestStatus = 0;
+        } else {
+          state.entryRequestStatus = Number(snap.docs[0].data()?.status || 0);
+        }
+        renderEntryRequestUi();
+      });
+    }
+
+    function subscribeHostEntryRequests() {
+      if (state.hostEntryRequestsUnsub) {
+        state.hostEntryRequestsUnsub();
+        state.hostEntryRequestsUnsub = null;
+      }
+
+      if (!isHostPage || !state.me || !isHost()) {
+        state.pendingEntryRequests = [];
+        return;
+      }
+
+      const q = query(
+        collection(db, "joining"),
+        where("hostUid", "==", roomUid),
+        where("status", "==", 1)
+      );
+
+      state.hostEntryRequestsUnsub = onSnapshot(q, (snap) => {
+        state.pendingEntryRequests = snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+          .sort((a, b) => String(a.nick || "").localeCompare(String(b.nick || ""), "ja"));
+
+        renderEntryRequestUi();
+      });
+    }
+
+    async function requestEntryApproval() {
+      if (!isRoomPage || !state.me || isHost()) return;
+      await requestEntryApproval({ roomUid });
+    }
+
+    async function fetchAddressByPostal(postal) {
+      const zip = String(postal || "").replace(/\D/g, "");
+      if (zip.length !== 7) return "";
+
+      const res = await fetch(`https://zipcloud.ibsnet.co.jp/api/search?zipcode=${zip}`);
+      const json = await res.json();
+
+      if (!json || !Array.isArray(json.results) || !json.results[0]) return "";
+
+      const r = json.results[0];
+      return `${r.address1 || ""}${r.address2 || ""}${r.address3 || ""}`;
+    }
+
+    async function applyPostalToAddress(postalEl, addrEl) {
+      const zip = String(postalEl?.value || "").replace(/\D/g, "");
+      postalEl.value = zip;
+      if (zip.length !== 7) return;
+
+      try {
+        const addr = await fetchAddressByPostal(zip);
+        if (addr) addrEl.value = addr;
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    async function saveRoomFromEditor() {
+      const isTopPage = !isRoomPage && !isHostPage;
+      if (!isTopPage && !dom.targetPrizeSelect.value) {
+        alert("項目を選んでください。");
+        return;
+      }
+      const items = readItemsFromEditor();
+      if (!items.length) {
+        alert("項目を1つ以上入力してください");
+        return;
+      }
+      const drawMode = document.getElementById("editDrawMode").value;
+      const maxSlots = parseInt(document.getElementById("editMaxSlots").value);
+      const userMax = parseInt(document.getElementById("editUserMax").value);
+      if (!isRoomPage && !isHostPage) {
+        renderRoom({
+          ...(state.room || {}),
+          title: dom.titleInput.value.trim() || "タイトル",
+          list: stringifyList(items),
+          angle: 0,
+          phase: 0,
+          indexview: -1,
+          point: Number(state.room?.point || 0),
+        });
+        state.repeatConfirmNeeded = false;
+        closeModal(dom.modalBack);
+        return;
+      }
+
+      const { data } = await saveRoomConfig({
+        roomUid,
+        title: dom.titleInput.value.trim(),
+        description: dom.roomDescriptionInput.value,
+        list: stringifyList(items),
+        targetPrizeId: dom.targetPrizeSelect.value,
+        point: Number(state.room?.point || 0),
+        drawMode,
+        maxSlots,
+        userMax
+      });
+
+      if (data && data.error) {
+        throw new Error(data.error);
+      }
+
+      state.repeatConfirmNeeded = false;
+      closeModal(dom.modalBack);
+    }
+
+    async function doLogin() {
+      await signInWithEmailAndPassword(
+        auth,
+        dom.loginEmail.value.trim(),
+        dom.loginPass.value
+      );
+      closeModal(dom.authBack);
+    }
+
+    async function doSignup() {
+      const email = dom.signupEmail.value.trim();
+      const pass = dom.signupPass.value;
+      const pass2 = dom.signupPass2.value;
+      const plan = dom.signupPlan.value;
+      const nick = dom.signupNick.value.trim();
+
+      if (!email || !pass || !nick) throw new Error("未入力があります");
+      if (pass !== pass2) throw new Error("パスワード確認が一致しません");
+
+      const cred = await createUserWithEmailAndPassword(auth, email, pass);
+
+      await setDoc(doc(db, "spinfate_profiles", cred.user.uid), {
+        createdAt: serverTimestamp(),
+        limit: 0,
+        nick,
+        plan,
+        shipping: {
+          postal: dom.shipPostal.value.trim(),
+          addr: dom.shipAddr2.value.trim(),
+          building: dom.shipBuilding.value.trim(),
+          sei: dom.shipSei.value.trim(),
+          mei: dom.shipMei.value.trim(),
+          seiKana: dom.shipSeiKana.value.trim(),
+          meiKana: dom.shipMeiKana.value.trim(),
+          phone: dom.shipPhone.value.trim()
+        },
+        shippingAuto: dom.shipAddrAuto.value.trim(),
+        usageUsed: 0,
+        usageMonth: "",
+        designate: [],
+        iconUrl: "",
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      await auth.authStateReady();
+
+      let iconUrl = "";
+      if (state.signupIconFile) {
+        iconUrl = await uploadImageFile(
+          state.signupIconFile,
+          `users/${cred.user.uid}/icon.webp`
+        );
+      }
+
+      await updateProfile(cred.user, {
+        displayName: nick,
+        photoURL: iconUrl || null
+      });
+
+      if (iconUrl) {
+        await setDoc(doc(db, "spinfate_profiles", cred.user.uid), {
+          iconUrl,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      closeModal(dom.authBack);
+    }
+
+    async function savePrizeMaster() {
+      if (!state.me || isFreePlan()) {
+        throw new Error("主催者のみ登録できます");
+      }
+
+      const name = String(dom.prizeName.value || "").trim();
+      const point = Math.max(0, Number(dom.prizePoint.value || 0) || 0);
+      const cost = Math.max(0, Number(dom.prizeCost.value || 0) || 0);
+      const exchangeRate = Math.max(0, Math.min(100, Number(dom.prizeExchangeRate.value || 0) || 0));
+
+      if (!name) {
+        throw new Error("景品名を入力してください");
+      }
+
+      let imageUrl = String(dom.prizeImageSelect.value || "").trim();
+      if (state.prizeImageFile) {
+        const imageKey = normalizeImageKey(state.prizeImageFile.name);
+
+        imageUrl = await uploadImageFile(
+          state.prizeImageFile,
+          `prize_masters/${state.me.uid}/${imageKey}.webp`
+        );
+      }
+
+      await savePrizeMaster({
+        name,
+        point,
+        cost,
+        exchangeRate,
+        imageUrl
+      });
+
+      dom.prizeName.value = "";
+      dom.prizePoint.value = "";
+      dom.prizeCost.value = "";
+      dom.prizeExchangeRate.value = "";
+      dom.prizeImageInput.value = "";
+      dom.prizeImagePreview.removeAttribute("src");
+      state.prizeImageFile = null;
+
+      closeModal(dom.prizeBack);
+    }
+
+    async function resolveExistingPrizeImageUrl(imageName) {
+      const raw = String(imageName || "").trim();
+      if (!raw) return "";
+
+      const imageKey = normalizeImageKey(raw);
+      const storagePath = `prize_masters/${state.me.uid}/${imageKey}.webp`;
+
+      try {
+        const url = await getDownloadURL(ref(storage, storagePath));
+        return url;
+      } catch {
+        return `__missing__:${imageName}`;
+      }
+    }
+
+    function populatePrizeImageSelect() {
+      dom.prizeImageSelect.innerHTML = `<option value="">登録画像から選択</option>`;
+      state.prizeImages.forEach((item) => {
+        const opt = document.createElement("option");
+        opt.value = String(item.imageUrl || "");
+        opt.textContent = String(item.imageName || "");
+        dom.prizeImageSelect.appendChild(opt);
+      });
+    }
+
+    async function savePrizeMastersCsv() {
+      if (!state.me || isFreePlan()) {
+        throw new Error("主催者のみ登録できます");
+      }
+
+      const file = dom.prizeCsvInput.files?.[0];
+      if (!file) {
+        throw new Error("CSVファイルを選択してください");
+      }
+
+      const text = await file.text();
+      const lines = text
+        .replace(/^\uFEFF/, "")
+        .split(/\r?\n/)
+        .map((x) => x.trim())
+        .filter(Boolean);
+
+      if (!lines.length) {
+        throw new Error("CSVが空です");
+      }
+
+      for (const line of lines) {
+        const cols = line.split(",").map((x) => x.trim());
+        const name = String(cols[0] || "").trim();
+        const point = Math.max(0, Number(cols[1] || 0) || 0);
+        const cost = Math.max(0, Number(cols[2] || 0) || 0);
+        const exchangeRate = Math.max(0, Math.min(100, Number(cols[3] || 0) || 0));
+        const imageName = String(cols[4] || "").trim();
+
+        if (!name) continue;
+
+        let imageUrl = "";
+        if (imageName) {
+          const normalizedImageName = normalizeImageKey(imageName);
+          imageUrl = await resolveExistingPrizeImageUrl(imageName);
+          if (!imageUrl) {
+            imageUrl = `__missing__:${normalizedImageName}`;
+          await addMissingPrizeImage({ imageName: normalizedImageName });
+          }
+        }
+
+      await savePrizeMaster({
+          name,
+          point,
+          cost,
+          exchangeRate,
+          imageUrl
+        });
+      }
+
+      dom.prizeCsvInput.value = "";
+      await refreshPrizeAdminData();
+      closeModal(dom.prizeBack);
+    }
+
+    function renderMissingImageBadges() {
+      const count = state.missingPrizeImages.length;
+      dom.missingImageCount.style.display = count > 0 ? "inline-block" : "none";
+      dom.missingImageCount.textContent = String(count);
+      dom.missingImageSection.style.display = count > 0 ? "block" : "none";
+      dom.missingImageSectionCount.textContent = count > 0 ? `(${count})` : "";
+    }
+
+    function renderPrizeList() {
+      if (!state.prizeMasters.length) {
+        dom.prizeListRows.innerHTML = `<div class="entryEmpty">登録景品はありません</div>`;
+        return;
+      }
+
+      dom.prizeListRows.innerHTML = state.prizeMasters.map((item) => `
+      <div class="entryReqRow">
+        <div class="entryReqLeft">
+          ${String(item.imageUrl || "").trim() && !String(item.imageUrl || "").startsWith("__missing__:") ? `
+            <img src="${escapeHtml(item.imageUrl || "")}" alt="" style="width:40px; height:40px; border-radius:10px; object-fit:cover; background:rgba(15,23,42,.08);">
+          ` : ""}
+          <div class="entryReqNick">${escapeHtml(item.name || "")}</div>
+        </div>
+        <div class="entryReqActions">
+          <button class="entryNgBtn" type="button" data-prize-delete="${escapeHtml(item.id)}" data-prize-name="${escapeHtml(item.name || "")}">🗑</button>
+        </div>
+      </div>
+      `).join("");
+    }
+
+    function getPrizeImageUsageCount(imageName) {
+      if (!state.me || !imageName) return 0;
+
+      const storagePath = `prize_masters/${state.me.uid}/${imageName}.webp`;
+      const encodedStoragePath = encodeURIComponent(storagePath);
+      const fileName = `${imageName}.webp`;
+
+      return state.prizeMasters.filter((item) => {
+        const imageUrl = String(item.imageUrl || "").trim();
+        return (
+          imageUrl === `__missing__:${imageName}` ||
+          imageUrl.includes(encodedStoragePath) ||
+          imageUrl.includes(storagePath) ||
+          imageUrl.endsWith(`/${fileName}`) ||
+          imageUrl.includes(`/${fileName}?`) ||
+          imageUrl.includes(encodeURIComponent(fileName))
+        );
+      }).length;
+    }
+
+    function renderPrizeImageList() {
+      if (!state.prizeImages.length) {
+        dom.prizeImageListRows.innerHTML = `<div class="entryEmpty">登録画像はありません</div>`;
+        return;
+      }
+
+      dom.prizeImageListRows.innerHTML = state.prizeImages.map((item) => `
+        <div class="entryReqRow">
+          <div class="entryReqLeft">
+            <img src="${escapeHtml(item.imageUrl || "")}" alt="">
+            <div class="entryReqNick">${escapeHtml(item.imageName || "")}</div>
+          </div>
+          <div class="entryReqActions">
+            <button class="entryNgBtn" type="button" data-image-delete="${escapeHtml(item.imageName || "")}">🗑</button>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function renderMissingImages() {
+      if (!state.missingPrizeImages.length) {
+        dom.missingImagesRows.innerHTML = `<div class="entryEmpty">不足画像はありません</div>`;
+        return;
+      }
+
+      dom.missingImagesRows.innerHTML = state.missingPrizeImages.map((item) => `
+        <div class="entryReqRow">
+          <div class="entryReqNick">${escapeHtml(item.imageName || "")}</div>
+        </div>
+      `).join("");
+    }
+
+    async function refreshPrizeAdminData() {
+      const mode = document.getElementById("editDrawMode")?.value || "A";
+      if (!state.me || isFreePlan() || !isHostPage || !isHost()) {
+        state.prizeMasters = [];
+        state.prizeImages = [];
+        state.missingPrizeImages = [];
+        renderPrizeList();
+        renderPrizeImageList();
+        renderMissingImages();
+        renderMissingImageBadges();
+        return;
+      }
+      
+      // httpsCallableを排除し、Firestoreへ直接クエリを発行します
+      const [prizeSnap, imageSnap, missingSnap] = await Promise.all([
+        getDocs(query(collection(db, "prize_masters"), where("hostUid", "==", state.me.uid))),
+        getDocs(query(collection(db, "prize_images"), where("hostUid", "==", state.me.uid))),
+        getDocs(query(collection(db, "missing_prize_images"), where("hostUid", "==", state.me.uid)))
+      ]);
+
+      state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.prizeImages = imageSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+      state.missingPrizeImages = missingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+      dom.targetPrizeSelect.innerHTML = `<option value="">項目を選択</option>`;
+      const pSrc = (mode === "B") ? state.approvedUsers : state.prizeMasters;
+      pSrc.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = String((mode === "B" ? p.participantUid : p.id) || "");
+        opt.textContent = String((mode === "B" ? p.nick : p.name) || "");
+        dom.targetPrizeSelect.appendChild(opt);
+      });
+
+      renderPrizeList();
+      renderPrizeImageList();
+      renderMissingImages();
+      renderMissingImageBadges();
+    }
+
+    async function refreshApprovedUsers() {
+      state.approvedUsers = [];
+
+      if (!state.me || isFreePlan() || !isHostPage || !isHost()) {
+        return;
+      }
+
+      const q = query(
+        collection(db, "joining"),
+        where("hostUid", "==", roomUid),
+        where("status", "==", 2)
+      );
+
+      const snap = await getDocs(q);
+
+      state.approvedUsers = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() || {}) }))
+        .sort((a, b) => String(a.nick || "").localeCompare(String(b.nick || ""), "ja"));
+    }
+
+    function renderPrizeInfo() {
+      const prizeId = String(state.room?.targetPrizeId || "");
+      const prize = (state.prizeMasters || []).find(
+        (x) => String(x.id || "") === prizeId
+      );
+
+      if (!prize) {
+        dom.prizeInfo.style.display = "none";
+        dom.prizeInfoName.textContent = "";
+        dom.prizeInfoImg.style.display = "none";
+        dom.prizeInfoImg.src = "";
+        return;
+      }
+
+      dom.prizeInfo.style.display = "block";
+      dom.prizeInfoName.textContent = String(prize.name || "");
+
+      if (prize.imageUrl) {
+        dom.prizeInfoImg.src = String(prize.imageUrl);
+        dom.prizeInfoImg.style.display = "block";
+      } else {
+        dom.prizeInfoImg.style.display = "none";
+        dom.prizeInfoImg.src = "";
+      }
+    }
+
+    function openConfirm(text, onOk) {
+      state.pendingConfirm = onOk;
+      dom.confirmText.textContent = text;
+      openModal(dom.confirmBack);
+    }
+
+    async function uploadMissingPrizeImages(files) {
+      const list = Array.from(files || []);
+      if (!list.length || !state.me) return;
+
+      const missingMap = new Map(
+        state.missingPrizeImages.map((x) => [String(x.imageName || ""), true])
+      );
+
+      for (const file of list) {
+        const imageName = normalizeImageKey(file.name);
+        if (!missingMap.has(imageName)) {
+          continue;
+        }
+
+        const imageUrl = await uploadImageFile(
+          file,
+          `prize_masters/${state.me.uid}/${imageName}.webp`
+        );
+
+        await applyPrizeImage({
+          imageName,
+          imageUrl
+        });
+      }
+
+      await refreshPrizeAdminData();
+    }
+
+    async function saveAccountEdit() {
+      if (!state.me) return;
+
+      let iconUrl = state.myProfile?.iconUrl || "";
+      if (state.accountEditIconFile) {
+        iconUrl = await uploadImageFile(
+          state.accountEditIconFile,
+          `users/${state.me.uid}/icon.webp`
+        );
+      }
+
+      const nick = dom.accountEditNick.value.trim();
+
+      await setDoc(doc(db, "spinfate_profiles", state.me.uid), {
+        nick,
+        iconUrl,
+        shipping: {
+          postal: dom.accountEditPostal.value.trim(),
+          addr: dom.accountEditAddr2.value.trim(),
+          building: dom.accountEditBuilding.value.trim(),
+          phone: dom.accountEditPhone.value.trim()
+        },
+        shippingAuto: dom.accountEditAddrAuto.value.trim(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      await updateProfile(state.me, {
+        displayName: nick || null,
+        photoURL: iconUrl || null
+      });
+
+      if (isHost()) {
+        await setDoc(doc(db, "rooms", state.me.uid), {
+          hostNick: nick,
+          hostIconUrl: iconUrl,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      }
+
+      closeModal(dom.accountEditBack);
+    }
+
+    dom.centerBtn.addEventListener("click", async () => {
+      if (!state.room) return;
+
+      if (state.wheel.status === "idle") {
+        if (isHostPage && state.repeatConfirmNeeded) {
+          const ok = confirm("前回と同じ内容で抽選をしますか？");
+          if (!ok) return;
+          await updateRoomIndex({ roomUid });
+          state.repeatConfirmNeeded = false;
+          return;
+        }
+
+        if (isHostPage && isHost()) {
+          const limit = Math.max(0, Number(state.myProfile?.limit || 0));
+          const used = Math.max(0, Number(state.myProfile?.usageUsed || 0));
+          const remain = Math.max(0, limit - used);
+          if (remain <= 0) {
+            alert("今月の抽選回数は終了しました");
+            return;
+          }
+        }
+
+        if (!isRoomPage && !isHostPage) {
+          renderRoom({
+            ...(state.room || {}),
+            phase: 1,
+          });
+          return;
+        }
+
+        if (!isHostPage || !isHost()) return;
+
+        state.wheel.status = "spinning";
+        state.wheel.stopHandledAtPhase2 = false;
+        state.wheel.finishedCalled = false;
+        setCenterButtonByState();
+        scheduleTick();
+        try {
+          await startRoomSpin({ roomUid });
+        } catch (e) {
+          state.wheel.status = "idle";
+          setCenterButtonByState();
+          stopRaf();
+          drawWheel();
+          alert(e?.message || "開始に失敗しました");
+        }
+        return;
+      }
+
+      if (state.wheel.status === "spinning") {
+        state.repeatConfirmNeeded = true;
+        if (!isRoomPage && !isHostPage) {
+          const items = state.items || [];
+          if (!items.length) return;
+          const picked = pickWeightedIndex(items);
+          if (picked < 0) return;
+          const offsetRatio = 0.08 + Math.random() * 0.84;
+          const finalAngle = calcFinalAngleForIndex(items, picked, offsetRatio);
+          renderRoom({
+            ...(state.room || {}),
+            phase: 2,
+            index: picked,
+            angle: finalAngle
+          });
+          return;
+        }
+
+        try {
+          let canStop = isHostPage && state.me?.uid === roomUid;
+          if (!canStop) {
+            const q = query(
+              collection(db, "joining"),
+              where("hostUid", "==", roomUid),
+              where("status", "==", 2)
+            );
+            const snap = await getDocs(q);
+            canStop =
+              snap.size === 1 &&
+              String(snap.docs[0].data()?.participantUid || "") === String(state.me?.uid || "");
+          }
+          if (!canStop) return;
+          await stopRoomSpin({ roomUid });
+        } catch (e) {
+          alert(e?.message || "停止に失敗しました");
+        }
+      }
+    });
+
+    dom.btnPlus.addEventListener("click", async () => {
+      if (isRoomPage && !isHost()) return;
+      await refreshPrizeAdminData();
+      await refreshApprovedUsers();
+      fillItemEditorFromRoom();
+      if (!dom.itemList.children.length) {
+        addItemRow();
+      }
+      openModal(dom.modalBack);
+    });
+    document.getElementById("editDrawMode").addEventListener("change", () => {
+      if (!state.room) state.room = {};
+      state.room.drawMode = document.getElementById("editDrawMode").value;
+      fillItemEditorFromRoom();
+    });
+    dom.modalClose.addEventListener("click", () => closeModal(dom.modalBack));
+    dom.btnCancel.addEventListener("click", () => closeModal(dom.modalBack));
+    dom.btnAdd.addEventListener("click", () => {
+      const idx = dom.itemList.querySelectorAll(".itemRow").length;
+      const mode = document.getElementById("editDrawMode").value;
+      dom.itemList.appendChild(makeItemRow("", 1, getNextItemColor(idx), mode));
+    });
+    dom.btnSave.addEventListener("click", () => {
+      saveRoomFromEditor().catch((e) => alert(e?.message || "保存に失敗しました"));
+    });
+
+    dom.drawImageThumb.addEventListener("click", () => {
+      if (!state.room?.imageUrl) return;
+      dom.drawImageViewImg.src = state.room.imageUrl;
+      openModal(dom.drawImageViewBack);
+    });
+    dom.drawImageViewBack.addEventListener("click", (e) => {
+      if (e.target === dom.drawImageViewBack || e.target === dom.drawImageViewImg) {
+        closeModal(dom.drawImageViewBack);
+      }
+    });
+
+    dom.descToggle.addEventListener("click", () => {
+      state.descExpanded = !state.descExpanded;
+      renderDescription();
+    });
+
+    dom.entryRequestBtn.addEventListener("click", async () => {
+      const status = Number(state.entryRequestStatus || 0);
+      if (status === 1 || status === 2) return;
+
+      try {
+        await requestEntryApproval();
+      } catch (e) {
+        alert(e?.message || "参加希望の送信に失敗しました");
+      }
+    });
+
+    dom.btnEntryRequestsHost.addEventListener("click", () => {
+      openModal(dom.entryRequestBack);
+    });
+
+    dom.entryRequestClose.addEventListener("click", () => closeModal(dom.entryRequestBack));
+    dom.entryRequestCancel.addEventListener("click", () => closeModal(dom.entryRequestBack));
+
+    dom.btnLogin.addEventListener("click", () => {
+      setAuthMode("login");
+      openModal(dom.authBack);
+    });
+
+    dom.authClose.addEventListener("click", () => closeModal(dom.authBack));
+    dom.authCancel.addEventListener("click", () => closeModal(dom.authBack));
+    dom.toSignup.addEventListener("click", () => setAuthMode("signup"));
+    dom.toLogin.addEventListener("click", () => setAuthMode("login"));
+    dom.authSubmit.addEventListener("click", async (e) => {
+      e.preventDefault(); // フォームの意図しない挙動を防ぐ
+      dom.authErr.textContent = "";
+      
+      try {
+        if (state.authMode === "login") {
+          // ログインに必要な項目だけをその場で確実に取得
+          const email = dom.loginEmail.value.trim();
+          const pass = dom.loginPass.value;
+          
+          if (!email || !pass) throw new Error("メールとパスワードを入力してください");
+          
+          await signInWithEmailAndPassword(auth, email, pass);
+          closeModal(dom.authBack);
+        } else {
+          // サインアップ処理へ
+          await doSignup();
+        }
+      } catch (err) {
+        // Firebaseのエラーメッセージを分かりやすく表示
+        dom.authErr.textContent = err.message;
+      }
+    });
+
+    dom.loginForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        dom.authErr.textContent = "";
+        await doLogin();
+      } catch (e2) {
+        dom.authErr.textContent = e2?.message || String(e2);
+      }
+    });
+
+    dom.signupForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        dom.authErr.textContent = "";
+        await doSignup();
+      } catch (e2) {
+        dom.authErr.textContent = e2?.message || String(e2);
+      }
+    });
+
+    dom.signupIcon.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      state.signupIconFile = file || null;
+      if (file) dom.iconPreview.src = URL.createObjectURL(file);
+    });
+
+    dom.shipPostal.addEventListener("input", () => {
+      dom.shipPostal.value = dom.shipPostal.value.replace(/\D/g, "").slice(0, 7);
+    });
+    dom.shipPostal.addEventListener("blur", () => {
+      applyPostalToAddress(dom.shipPostal, dom.shipAddrAuto);
+    });
+
+    dom.accountEditPostal.addEventListener("input", () => {
+      dom.accountEditPostal.value = dom.accountEditPostal.value.replace(/\D/g, "").slice(0, 7);
+    });
+    dom.accountEditPostal.addEventListener("blur", () => {
+      applyPostalToAddress(dom.accountEditPostal, dom.accountEditAddrAuto);
+    });
+
+    dom.accountMenuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      dom.accountMenu.style.display =
+        dom.accountMenu.style.display === "block" ? "none" : "block";
+    });
+
+    document.addEventListener("click", () => closeAllMenus());
+
+    dom.btnLogout.addEventListener("click", async () => {
+      await signOut(auth);
+      closeAllMenus();
+    });
+
+    dom.btnGoRoom.addEventListener("click", () => {
+      if (isHostPage || isRoomPage) {
+        location.href = "/";
+        return;
+      }
+      location.href = `/host/${state.me?.uid || ""}`;
+    });
+
+    dom.btnAccountEdit.addEventListener("click", async () => {
+      closeAllMenus();
+      const p = state.myProfile || {};
+      dom.accountEditNick.value = p.nick || "";
+      dom.accountEditIconPreview.src = p.iconUrl || "";
+      dom.accountEditDescription.value = state.room?.description || "";
+      dom.accountEditPhone.value = p.shipping?.phone || "";
+      dom.accountEditPostal.value = p.shipping?.postal || "";
+      dom.accountEditAddrAuto.value = p.shippingAuto || "";
+      dom.accountEditAddr2.value = p.shipping?.addr || "";
+      dom.accountEditBuilding.value = p.shipping?.building || "";
+      state.accountEditIconFile = null;
+      openModal(dom.accountEditBack);
+    });
+
+    dom.accountEditClose.addEventListener("click", () => closeModal(dom.accountEditBack));
+    dom.accountEditCancel.addEventListener("click", () => closeModal(dom.accountEditBack));
+    dom.accountEditSave.addEventListener("click", () => {
+      saveAccountEdit().catch((e) => alert(e?.message || "保存に失敗しました"));
+    });
+    dom.accountEditIcon.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      state.accountEditIconFile = file || null;
+      if (file) dom.accountEditIconPreview.src = URL.createObjectURL(file);
+    });
+
+    dom.btnPrize.addEventListener("click", async () => {
+      if (!state.me || isFreePlan()) return;
+
+      try {
+        await refreshPrizeAdminData();
+      } catch (e) {
+        console.error(e);
+      }
+
+      dom.prizeName.value = "";
+      dom.prizePoint.value = "";
+      dom.prizeCost.value = "";
+      dom.prizeExchangeRate.value = "";
+      dom.prizeCsvInput.value = "";
+      dom.prizeImageInput.value = "";
+      dom.prizeImageSelect.value = "";
+      dom.prizeImagePreview.removeAttribute("src");
+      state.prizeImageFile = null;
+
+      populatePrizeImageSelect();
+      openModal(dom.prizeBack);
+    });
+
+    dom.prizeClose.addEventListener("click", () => closeModal(dom.prizeBack));
+    dom.prizeCancel.addEventListener("click", () => closeModal(dom.prizeBack));
+
+    dom.prizeImageInput.addEventListener("change", (e) => {
+      const file = e.target.files?.[0];
+      state.prizeImageFile = file || null;
+
+      if (!file) {
+        dom.prizeImagePreview.removeAttribute("src");
+        return;
+      }
+
+      dom.prizeImagePreview.src = URL.createObjectURL(file);
+    });
+
+    dom.prizeImageSelect.addEventListener("change", () => {
+      const url = String(dom.prizeImageSelect.value || "").trim();
+
+      if (!url) {
+        if (!state.prizeImageFile) {
+          dom.prizeImagePreview.removeAttribute("src");
+        }
+        return;
+      }
+
+      dom.prizeImageInput.value = "";
+      state.prizeImageFile = null;
+      dom.prizeImagePreview.src = url;
+    });
+
+    dom.prizeSave.addEventListener("click", () => {
+      savePrizeMaster().catch((e) => alert(e?.message || "景品登録に失敗しました"));
+    });
+
+    dom.prizeCsvSave.addEventListener("click", () => {
+      savePrizeMastersCsv().catch((e) => alert(e?.message || "CSV登録に失敗しました"));
+    });
+
+    dom.btnPrizeList.addEventListener("click", async () => {
+      closeAllMenus();
+      await refreshPrizeAdminData();
+      openModal(dom.prizeListBack);
+    });
+
+    dom.btnPrizeImageList.addEventListener("click", async () => {
+      closeAllMenus();
+      await refreshPrizeAdminData();
+      openModal(dom.prizeImageListBack);
+    });
+
+    dom.btnOpenMissingImages.addEventListener("click", async () => {
+      await refreshPrizeAdminData();
+      openModal(dom.missingImagesBack);
+    });
+
+    dom.prizeListClose.addEventListener("click", () => closeModal(dom.prizeListBack));
+    dom.prizeListCancel.addEventListener("click", () => closeModal(dom.prizeListBack));
+    dom.prizeImageListClose.addEventListener("click", () => closeModal(dom.prizeImageListBack));
+    dom.prizeImageListCancel.addEventListener("click", () => closeModal(dom.prizeImageListBack));
+    dom.missingImagesClose.addEventListener("click", () => closeModal(dom.missingImagesBack));
+    dom.missingImagesCancel.addEventListener("click", () => closeModal(dom.missingImagesBack));
+    dom.confirmClose.addEventListener("click", () => closeModal(dom.confirmBack));
+    dom.confirmCancel.addEventListener("click", () => closeModal(dom.confirmBack));
+
+    dom.confirmOk.addEventListener("click", async () => {
+      const fn = state.pendingConfirm;
+      closeModal(dom.confirmBack);
+      state.pendingConfirm = null;
+      if (fn) {
+        await fn();
+        await refreshPrizeAdminData();
+      }
+    });
+
+    dom.prizeListRows.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-prize-delete]");
+      if (!btn) return;
+
+      const prizeId = btn.dataset.prizeDelete;
+      const prizeName = btn.dataset.prizeName || "";
+      openConfirm(`「${prizeName}」を削除しますか？`, async () => {
+        await deletePrizeMaster({ prizeId });
+      });
+    });
+
+    dom.prizeImageListRows.addEventListener("click", (e) => {
+      const delBtn = e.target.closest("[data-image-delete]");
+      if (!delBtn) return;
+
+      const imageName = delBtn.dataset.imageDelete || "";
+      const usageCount = getPrizeImageUsageCount(imageName);
+
+      openConfirm(
+        usageCount > 0
+          ? `${usageCount}件でこの画像が使われていますが削除しますか？`
+          : `「${imageName}」を削除しますか？`,
+        async () => {
+          await deletePrizeImage({ imageName });
+        }
+      );
+    });
+
+    dom.missingImagesInput.addEventListener("change", async () => {
+      await uploadMissingPrizeImages(dom.missingImagesInput.files);
+      dom.missingImagesInput.value = "";
+    });
+
+    dom.missingDropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+    });
+
+    dom.missingDropZone.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      await uploadMissingPrizeImages(e.dataTransfer?.files || []);
+    });
+
+    [
+      dom.modalBack,
+      dom.authBack,
+      dom.accountEditBack,
+      dom.prizeBack,
+      dom.entryRequestBack,
+      dom.prizeListBack,
+      dom.prizeImageListBack,
+      dom.missingImagesBack,
+      dom.confirmBack
+    ].forEach((back) => {
+      back.addEventListener("click", (e) => {
+        if (e.target === back) closeModal(back);
+      });
+    });
+
+    onAuthStateChanged(auth, async (user) => {
+      state.me = user || null;
+      state.myProfile = null;
+      state.entryRequestStatus = 0;
+      state.pendingEntryRequests = [];
+
+      if (user && roomUid) {
+        if (isRoomPage && user.uid === roomUid) {
+          location.replace(`/host/${roomUid}`);
+          return;
+        }
+        if (isHostPage && user.uid !== roomUid) {
+          location.replace(`/room/${roomUid}`);
+          return;
+        }
+      }
+
+      renderUser();
+
+      if (state.myProfileUnsub) {
+        state.myProfileUnsub();
+        state.myProfileUnsub = null;
+      }
+      if (state.myEntryRequestUnsub) {
+        state.myEntryRequestUnsub();
+        state.myEntryRequestUnsub = null;
+      }
+      if (state.hostEntryRequestsUnsub) {
+        state.hostEntryRequestsUnsub();
+        state.hostEntryRequestsUnsub = null;
+      }
+
+      if (user) {
+        subscribeMyProfile(user.uid);
+        if (isHostPage && user.uid === roomUid) {
+          await ensureHostRoom().catch(console.error);
+        }
+      }
+
+      subscribeMyEntryRequest();
+      subscribeHostEntryRequests();
+      await refreshApprovedUsers();
+      renderRemaining();
+      renderEntryRequestUi();
+    });
+
+    subscribeRoom();
+    drawWheel();
+  </script>
+</body>
+</html>
