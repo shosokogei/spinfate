@@ -888,14 +888,28 @@ function subscribeRoom() {
     state.roomUnsub = null;
   }
 
+  // 1. トップページの場合のみデモ（ABC）を表示
   if (!isRoomPage && !isHostPage) {
     applyLocalDefaultRoom();
     return;
   }
 
+  // 2. ルームページの場合
   state.roomUnsub = onSnapshot(doc(db, "rooms", roomUid), (snap) => {
     if (!snap.exists()) {
-      applyLocalDefaultRoom();
+      // 3. ルームデータがない場合は「空」の状態で初期化
+      renderRoom({
+        angle: 0,
+        hostIconUrl: "",
+        hostNick: "",
+        imageUrl: "",
+        list: JSON.stringify([]), // ここを空にする
+        phase: 0,
+        index: -1,
+        indexview: -1,
+        title: "タイトル",
+        point: 0
+      });
       return;
     }
     renderRoom(snap.data());
