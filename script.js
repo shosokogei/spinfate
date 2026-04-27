@@ -575,54 +575,34 @@ function renderRemaining() {
 }
 
 function renderUser() {
+  const isTopPage = !isRoomPage && !isHostPage;
+  const isOwner = isHost();
+  const isFree = isFreePlan();
+
+  // 1. 基本的なユーザー情報の表示/非表示
   if (!state.me) {
     dom.btnLogin.style.display = "inline-flex";
     dom.userBox.style.display = "none";
     dom.btnGoRoom.style.display = "none";
     dom.btnPrizeList.style.display = "none";
     dom.btnPrizeImageList.style.display = "none";
-    dom.btnPlus.style.display = "none";
+    
+    // トップページならボタンを表示、それ以外は非表示
+    dom.btnPlus.style.display = isTopPage ? "inline-flex" : "none";
     return;
   }
 
   dom.btnLogin.style.display = "none";
   dom.userBox.style.display = "flex";
 
-  const isOwner = isHost();
+  // 2. 権限に基づく制御
+  // トップページはデモとして編集可。それ以外はホスト本人かつ有料プランのみ可。
+  const canEditItems = isTopPage || (isOwner && !isFree);
 
-  const nick = state.myProfile?.nick || state.me.displayName || "USER";
-  dom.userTag.textContent = nick;
-
-  const iconUrl = state.myProfile?.iconUrl || state.me.photoURL || "";
-  if (iconUrl) {
-    dom.userIcon.src = iconUrl;
-    dom.userIcon.style.display = "block";
-  } else {
-    dom.userIcon.removeAttribute("src");
-    dom.userIcon.style.display = "none";
-  }
-
-  dom.btnGoRoom.style.display = isFreePlan() ? "none" : "inline-flex";
-  dom.btnGoRoom.textContent = (isRoomPage || isHostPage) ? "TOP" : "HOST";
-
-  const isHostAdminPage = !isFreePlan() && isHostPage && isHost();
-  const isTopPage = !isRoomPage && !isHostPage;
-  const canEditItems = isTopPage || (isOwner && !isFreePlan());
-
-  // --- ここでログを出力して状態を確認 ---
-  console.log("renderUser Debug:", {
-    isOwner,      // 自分がホストか？
-    isTopPage,    // トップページか？
-    isFree,       // 無料プランか？
-    canEditItems, // 最終的な判定
-    path: location.pathname // 現在のURL
-  });
-  // ------------------------------------
-
-  dom.btnPrize.style.display = (isOwner && !isFreePlan()) ? "inline-flex" : "none"; // 景品登録は完全にホストのみ
-  dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none"; // ＋ボタンはトップまたはホスト本人のみ
-  dom.btnPrizeList.style.display = (isOwner && !isFreePlan()) ? "block" : "none";
-  dom.btnPrizeImageList.style.display = (isOwner && !isFreePlan()) ? "flex" : "none";
+  dom.btnPrize.style.display = (isOwner && !isFree) ? "inline-flex" : "none";
+  dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none";
+  dom.btnPrizeList.style.display = (isOwner && !isFree) ? "block" : "none";
+  dom.btnPrizeImageList.style.display = (isOwner && !isFree) ? "flex" : "none";
 
   renderEntryRequestUi();
 }
