@@ -587,6 +587,8 @@ function renderUser() {
   dom.btnLogin.style.display = "none";
   dom.userBox.style.display = "flex";
 
+  const isOwner = isHost();
+
   const nick = state.myProfile?.nick || state.me.displayName || "USER";
   dom.userTag.textContent = nick;
 
@@ -604,12 +606,12 @@ function renderUser() {
 
   const isHostAdminPage = !isFreePlan() && isHostPage && isHost();
   const isTopPage = !isRoomPage && !isHostPage;
-  const canEditItems = isTopPage || (!isFreePlan() && isHostPage && isHost());
+  const canEditItems = isTopPage || (isOwner && !isFreePlan());
 
-  dom.btnPrize.style.display = isHostAdminPage ? "inline-flex" : "none";
-  dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none";
-  dom.btnPrizeList.style.display = isHostAdminPage ? "block" : "none";
-  dom.btnPrizeImageList.style.display = isHostAdminPage ? "flex" : "none";
+  dom.btnPrize.style.display = (isOwner && !isFreePlan()) ? "inline-flex" : "none"; // 景品登録は完全にホストのみ
+  dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none"; // ＋ボタンはトップまたはホスト本人のみ
+  dom.btnPrizeList.style.display = (isOwner && !isFreePlan()) ? "block" : "none";
+  dom.btnPrizeImageList.style.display = (isOwner && !isFreePlan()) ? "flex" : "none";
 
   renderEntryRequestUi();
 }
