@@ -838,9 +838,9 @@ async function ensureHostRoom() {
   const snap = await getDoc(roomRef);
   if (snap.exists()) return;
 
-  // Firestore SDK(setDoc)ではなく、完成済みのCallableを通じて初期化を行う
   try {
-    await saveRoomConfig({
+    // ネットワーク通信を行わず、Firestoreに直接データをセットします
+    await setDoc(roomRef, {
       roomUid: state.me.uid,
       title: "タイトル",
       description: "",
@@ -849,7 +849,8 @@ async function ensureHostRoom() {
       point: 0,
       drawMode: "A",
       maxSlots: 0,
-      userMax: 0
+      userMax: 0,
+      updatedAt: serverTimestamp() // Firestoreのサーバー時間を使用
     });
   } catch (e) {
     console.error("Room initialization failed:", e);
