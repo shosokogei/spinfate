@@ -608,6 +608,16 @@ function renderUser() {
   const isTopPage = !isRoomPage && !isHostPage;
   const canEditItems = isTopPage || (isOwner && !isFreePlan());
 
+  // --- ここでログを出力して状態を確認 ---
+  console.log("renderUser Debug:", {
+    isOwner,      // 自分がホストか？
+    isTopPage,    // トップページか？
+    isFree,       // 無料プランか？
+    canEditItems, // 最終的な判定
+    path: location.pathname // 現在のURL
+  });
+  // ------------------------------------
+
   dom.btnPrize.style.display = (isOwner && !isFreePlan()) ? "inline-flex" : "none"; // 景品登録は完全にホストのみ
   dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none"; // ＋ボタンはトップまたはホスト本人のみ
   dom.btnPrizeList.style.display = (isOwner && !isFreePlan()) ? "block" : "none";
