@@ -581,6 +581,7 @@ function renderUser() {
     dom.btnGoRoom.style.display = "none";
     dom.btnPrizeList.style.display = "none";
     dom.btnPrizeImageList.style.display = "none";
+    dom.btnPlus.style.display = "none";
     return;
   }
 
