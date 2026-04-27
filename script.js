@@ -1,4 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from "/js/firebase/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged,
@@ -7,7 +7,7 @@ import {
   signOut,
   updateProfile,
   connectAuthEmulator
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+} from "/js/firebase/firebase-auth.js";
 import {
   getFirestore,
   doc,
@@ -22,19 +22,19 @@ import {
   where,
   getDocs,
   limit
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+} from "/js/firebase/firebase-firestore.js";
 import {
   getStorage,
   ref,
   uploadBytes,
   getDownloadURL,
   connectStorageEmulator
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
+} from "/js/firebase/firebase-storage.js";
 import {
   getFunctions,
   httpsCallable,
   connectFunctionsEmulator
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-functions.js";
+} from "/js/firebase/firebase-functions.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZDUfNQO6nj0Y-agzpE1oCkYufbMi_Txk",
@@ -51,17 +51,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 const fn = getFunctions(app, "us-central1");
-
-const isLocal =
-  location.hostname === "127.0.0.1" ||
-  location.hostname === "localhost";
-
-if (isLocal) {
-  connectAuthEmulator(auth, "http://127.0.0.1:9099");
-  connectFirestoreEmulator(db, "127.0.0.1", 8080);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
-  connectFunctionsEmulator(fn, "127.0.0.1", 5001);
-}
 
 const roomUid = (() => {
   const m = location.pathname.match(/^\/(?:room|host)\/([^/]+)/);
