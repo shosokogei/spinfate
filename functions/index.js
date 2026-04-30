@@ -294,6 +294,8 @@ exports.onRoomConfigRequested = onDocumentCreated("users/{uid}/room_config_reque
     hostNick: String(profile.nick || ""),
     updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
+  // リクエスト処理後にドキュメントを整理
+  await event.data.ref.delete();
 });
 
 exports.onMissingImageDeletionRequested = onDocumentCreated("users/{uid}/missing_image_deletion_requests/{requestId}", async (event) => {
@@ -304,9 +306,6 @@ exports.onMissingImageDeletionRequested = onDocumentCreated("users/{uid}/missing
   const imageName = String(data.imageName || "").trim();
   if (!imageName) return;
 
-  // データベース上の不足画像データを削除する
   await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).delete();
-  
-  // 処理済みのリクエストを削除して整理する
   await event.data.ref.delete();
 });
