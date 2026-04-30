@@ -30,11 +30,15 @@ import {
   getDownloadURL,
   connectStorageEmulator
 } from "/js/firebase/firebase-storage.js";
-import {
-  getFunctions,
-  httpsCallable,
-  connectFunctionsEmulator
-} from "/js/firebase/firebase-functions.js";
+
+async function reviewEntryApproval({ roomUid, targetUid, status }) {
+  await setDoc(doc(db, "review_requests", `${roomUid}_${targetUid}`), {
+    roomUid: roomUid,
+    targetUid: targetUid,
+    status: status,
+    createdAt: serverTimestamp()
+  });
+}
 
 const firebaseConfig = {
   apiKey: "AIzaSyBZDUfNQO6nj0Y-agzpE1oCkYufbMi_Txk",
@@ -50,7 +54,6 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
-const fn = getFunctions(app, "us-central1");
 
 const roomUid = (() => {
   const m = location.pathname.match(/^\/(?:room|host)\/([^/]+)/);
@@ -960,13 +963,15 @@ dom.entryRequestList.addEventListener("click", async (e) => {
   btn.disabled = true;
 
   try {
+    // 呼び出し先は、Firestoreに書き込む関数へ変更されています
     await reviewEntryApproval({
       roomUid,
       targetUid,
       status: act === "ok" ? 2 : 3
-    });
+    }); 
   } catch (err) {
-    alert(err?.message || "参加申請の更新に失敗しました");
+    console.error("更新エラー:", err);
+    alert("更新に失敗しました");
     btn.disabled = false;
   }
 });
@@ -1058,7 +1063,7 @@ function subscribeHostEntryRequests() {
 
 async function requestEntryApproval() {
   if (!isRoomPage || !state.me || isHost()) return;
-  await requestEntryApproval({ roomUid });
+  setDoc(doc(db, "temp_entry_requests", state.me.uid), { roomUid: roomUid, createdAt: serverTimestamp() });
 }
 
 async function fetchAddressByPostal(postal) {
@@ -1116,21 +1121,20 @@ async function saveRoomFromEditor() {
     return;
   }
 
-  const { data } = await saveRoomConfig({
-    roomUid,
+  if (!state.me) return;
+  const requestRef = collection(db, "users", state.me.uid, "room_config_requests");
+  await addDoc(requestRef, {
+    roomUid: roomUid,
     title: dom.titleInput.value.trim(),
     description: dom.roomDescriptionInput.value,
     list: stringifyList(items),
     targetPrizeId: dom.targetPrizeSelect.value,
+    drawMode: drawMode,
+    maxSlots: maxSlots,
+    userMax: userMax,
     point: Number(state.room?.point || 0),
-    drawMode,
-    maxSlots,
-    userMax
+    createdAt: serverTimestamp()
   });
-
-  if (data && data.error) {
-    throw new Error(data.error);
-  }
 
   state.repeatConfirmNeeded = false;
   closeModal(dom.modalBack);
@@ -1222,14 +1226,15 @@ async function savePrizeMaster() {
   let imageUrl = String(dom.prizeImageSelect.value || "").trim();
   if (state.prizeImageFile) {
     const imageKey = normalizeImageKey(state.prizeImageFile.name);
-
     imageUrl = await uploadImageFile(
       state.prizeImageFile,
       `prize_masters/${state.me.uid}/${imageKey}.webp`
     );
   }
 
-  await savePrizeMaster({
+  // データベース操作を直接行わず、サーバー側の関数を呼び出す
+  const savePrizeFn = httpsCallable(functions, "savePrizeMaster");
+  await savePrizeFn({
     name,
     point,
     cost,
@@ -1237,6 +1242,7 @@ async function savePrizeMaster() {
     imageUrl
   });
 
+  // UIの初期化
   dom.prizeName.value = "";
   dom.prizePoint.value = "";
   dom.prizeCost.value = "";
@@ -1308,24 +1314,37 @@ async function savePrizeMastersCsv() {
     if (imageName) {
       const normalizedImageName = normalizeImageKey(imageName);
       imageUrl = await resolveExistingPrizeImageUrl(imageName);
-      if (!imageUrl) {
+      if (!imageUrl || imageUrl.startsWith("__missing__:")) {
         imageUrl = `__missing__:${normalizedImageName}`;
-      await addMissingPrizeImage({ imageName: normalizedImageName });
+        await addMissingPrizeImage({ imageName: normalizedImageName });
       }
     }
 
-  await savePrizeMaster({
+    await addDoc(collection(db, "prize_masters"), {
+      hostUid: state.me.uid,
       name,
       point,
       cost,
       exchangeRate,
-      imageUrl
+      imageUrl,
+      createdAt: serverTimestamp()
     });
   }
 
   dom.prizeCsvInput.value = "";
   await refreshPrizeAdminData();
   closeModal(dom.prizeBack);
+}
+
+async function addMissingPrizeImage({ imageName }) {
+  if (!state.me) return;
+
+  const requestRef = collection(db, "users", state.me.uid, "missing_image_requests");
+
+  await addDoc(requestRef, {
+    imageName: String(imageName).trim(),
+    createdAt: serverTimestamp()
+  });
 }
 
 function renderMissingImageBadges() {
@@ -1421,12 +1440,11 @@ async function refreshPrizeAdminData() {
     renderMissingImageBadges();
     return;
   }
-  
   // httpsCallableを排除し、Firestoreへ直接クエリを発行します
   const [prizeSnap, imageSnap, missingSnap] = await Promise.all([
-    getDocs(query(collection(db, "prize_masters"), where("hostUid", "==", state.me.uid))),
-    getDocs(query(collection(db, "prize_images"), where("hostUid", "==", state.me.uid))),
-    getDocs(query(collection(db, "missing_prize_images"), where("hostUid", "==", state.me.uid)))
+    getDocs(collection(db, "users", state.me.uid, "prizes")),
+    getDocs(collection(db, "users", state.me.uid, "images")),
+    getDocs(collection(db, "users", state.me.uid, "missing_images"))
   ]);
 
   state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -1518,10 +1536,13 @@ async function uploadMissingPrizeImages(files) {
       file,
       `prize_masters/${state.me.uid}/${imageName}.webp`
     );
-
-    await applyPrizeImage({
-      imageName,
-      imageUrl
+    // 内部ロジック（どの景品を更新するか等）を隠蔽し、リクエストのみ送信
+    if (!state.me) return;
+    const requestRef = collection(db, "users", state.me.uid, "prize_image_apply_requests");
+    await addDoc(requestRef, {
+      imageName: String(imageName).trim(),
+      imageUrl: String(imageUrl).trim(),
+      createdAt: serverTimestamp()
     });
   }
 
@@ -1577,7 +1598,10 @@ dom.centerBtn.addEventListener("click", async () => {
     if (isHostPage && state.repeatConfirmNeeded) {
       const ok = confirm("前回と同じ内容で抽選をしますか？");
       if (!ok) return;
-      await updateRoomIndex({ roomUid });
+      await addDoc(collection(db, "spin_requests"), {
+        roomUid: roomUid,
+        createdAt: serverTimestamp()
+      });
       state.repeatConfirmNeeded = false;
       return;
     }
@@ -1608,7 +1632,11 @@ dom.centerBtn.addEventListener("click", async () => {
     setCenterButtonByState();
     scheduleTick();
     try {
-      await startRoomSpin({ roomUid });
+      const roomRef = doc(db, "rooms", roomUid);
+      await updateDoc(roomRef, {
+        phase: 1, // これが開始トリガー
+        updatedAt: serverTimestamp()
+      });
     } catch (e) {
       state.wheel.status = "idle";
       setCenterButtonByState();
@@ -1651,7 +1679,11 @@ dom.centerBtn.addEventListener("click", async () => {
           String(snap.docs[0].data()?.participantUid || "") === String(state.me?.uid || "");
       }
       if (!canStop) return;
-      await stopRoomSpin({ roomUid });
+      const roomRef = doc(db, "rooms", roomUid);
+      await updateDoc(roomRef, {
+        phase: 2,
+        actionByUid: auth.currentUser.uid // バックエンドで判定するためにuidを含める
+      });
     } catch (e) {
       alert(e?.message || "停止に失敗しました");
     }
@@ -1935,14 +1967,20 @@ dom.confirmOk.addEventListener("click", async () => {
   }
 });
 
-dom.prizeListRows.addEventListener("click", async (e) => {
+dom.prizeListRows.addEventListener("click", (e) => {
   const btn = e.target.closest("[data-prize-delete]");
   if (!btn) return;
 
   const prizeId = btn.dataset.prizeDelete;
   const prizeName = btn.dataset.prizeName || "";
   openConfirm(`「${prizeName}」を削除しますか？`, async () => {
-    await deletePrizeMaster({ prizeId });
+    // 内部構造を隠蔽した削除リクエストを送信
+    if (!state.me) return;
+    const requestRef = collection(db, "users", state.me.uid, "prize_deletion_requests");
+    await addDoc(requestRef, {
+      prizeId: String(prizeId),
+      createdAt: serverTimestamp()
+    });
   });
 });
 
@@ -1958,10 +1996,27 @@ dom.prizeImageListRows.addEventListener("click", (e) => {
       ? `${usageCount}件でこの画像が使われていますが削除しますか？`
       : `「${imageName}」を削除しますか？`,
     async () => {
-      await deletePrizeImage({ imageName });
+      if (!state.me) return;
+      // 内部構造を隠蔽し、削除リクエストを送信
+      const requestRef = collection(db, "users", state.me.uid, "image_deletion_requests");
+      await addDoc(requestRef, {
+        imageName: String(imageName).trim(),
+        createdAt: serverTimestamp()
+      });
     }
   );
 });
+
+async function clearMissingPrizeImage(imageName) {
+  if (!state.me) return;
+  // ユーザー専用の「削除リクエスト用」パスへ書き込み（マスターのパスは隠蔽）
+  const requestRef = collection(db, "users", state.me.uid, "missing_image_deletion_requests");
+
+  await addDoc(requestRef, {
+    imageName: String(imageName).trim(),
+    createdAt: serverTimestamp()
+  });
+}
 
 dom.missingImagesInput.addEventListener("change", async () => {
   await uploadMissingPrizeImages(dom.missingImagesInput.files);

@@ -1,113 +1,40 @@
-const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onDocumentCreated, onDocumentUpdated, onDocumentDeleted } = require("firebase-functions/v2/firestore");
 const admin = require("firebase-admin");
 const { FieldValue } = require("firebase-admin/firestore");
 
-admin.initializeApp();
+if (!admin.apps.length) {
+  admin.initializeApp();
+}
 const db = admin.firestore();
+
+// --- ユーティリティ関数（ロジック完全維持） ---
 
 function parseRoomList(list) {
   let parsed;
   try {
     parsed = JSON.parse(String(list || "[]"));
   } catch {
-    throw new HttpsError("invalid-argument", "invalid list");
+    return null;
   }
-
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new HttpsError("invalid-argument", "list required");
-  }
-
+  if (!Array.isArray(parsed) || parsed.length === 0) return null;
   return parsed;
 }
 
 function pickWeightedIndex(parsed) {
   const total = parsed.reduce((s, x) => s + Math.max(1, Number(x[1] || 1)), 0);
   let r = Math.random() * total;
-
   for (let i = 0; i < parsed.length; i++) {
     r -= Math.max(1, Number(parsed[i][1] || 1));
     if (r < 0) return i;
   }
-
   return parsed.length - 1;
 }
-
-exports.updateRoomIndex = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-
-  const roomUid = String(request.data?.roomUid || "");
-
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const snap = await roomRef.get();
-
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "room not found");
-  }
-
-  const parsed = parseRoomList(snap.data().list);
-
-  await roomRef.update({
-    index: pickWeightedIndex(parsed)
-  });
-
-  return { ok: true };
-});
-
-exports.entrySlot = onCall({ cors: true }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "login required");
-
-  const uid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
-  const entryCount = request.data?.entryCount;
-
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  const count = Math.max(1, Number(entryCount || 1));
-
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const slotRef = db.collection("slots").doc(`${roomUid}_${uid}`);
-
-  return await db.runTransaction(async (tx) => {
-    const roomSnap = await tx.get(roomRef);
-    if (!roomSnap.exists) throw new HttpsError("not-found", "room not found");
-    const room = roomSnap.data();
-    
-    // バリデーション
-    if (room.phase !== 0) throw new HttpsError("failed-precondition", "抽選開始済み");
-    const max = Number(room.maxSlots || 0);
-    const filled = Number(room.filledSlots || 0);
-    if (max > 0 && (filled + count) > max) throw new HttpsError("out-of-range", "残口数不足");
-
-    // 更新
-    tx.update(roomRef, { 
-      filledSlots: FieldValue.increment(count) 
-    });
-    tx.set(slotRef, { 
-      roomUid, uid, count: FieldValue.increment(count), updatedAt: FieldValue.serverTimestamp() 
-    }, { merge: true });
-
-    // 満了したら自動スタート（phaseを1にする）
-    if (max > 0 && (filled + count) >= max) {
-      tx.update(roomRef, { phase: 1 });
-    }
-    return { ok: true };
-  });
-});
 
 function calcFinalAngleForIndex(parsed, index, offsetRatio = 0.5) {
   const total = parsed.reduce((s, x) => s + Math.max(1, Number(x[1] || 1)), 0);
   let a = -Math.PI / 2;
-
   for (let i = 0; i < parsed.length; i++) {
     const span = (Math.max(1, Number(parsed[i][1] || 1)) / total) * Math.PI * 2;
-
     if (i === index) {
       const ratio = Math.max(0.08, Math.min(0.92, Number(offsetRatio || 0.5)));
       const hit = a + span * ratio;
@@ -117,619 +44,269 @@ function calcFinalAngleForIndex(parsed, index, offsetRatio = 0.5) {
       if (angle < 0) angle += two;
       return angle;
     }
-
     a += span;
   }
-
   return 0;
 }
 
-exports.startRoomSpin = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
+// --- 1. スピン開始トリガー (制限チェック込) ---
+exports.triggerStartRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
 
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  if (uid !== roomUid) {
-    throw new HttpsError("permission-denied", "host only");
-  }
+  if (before.phase === 0 && after.phase === 1) {
+    const roomUid = event.params.roomUid;
+    const roomRef = event.data.after.ref;
+    const profileRef = db.collection("spinfate_profiles").doc(roomUid);
+    const [roomSnap, profileSnap] = await Promise.all([roomRef.get(), profileRef.get()]);
 
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const profileRef = db.collection("spinfate_profiles").doc(uid);
+    if (!roomSnap.exists) return;
 
-  const roomSnap = await roomRef.get();
+    const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
+    const remain = Math.max(0, Number(profile.limit || 0) - Number(profile.usageUsed || 0));
 
-  if (!roomSnap.exists) {
-    throw new HttpsError("not-found", "room not found");
-  }
-
-  const profileSnap = await profileRef.get();
-  const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
-  const limit = Math.max(0, Number(profile.limit || 0));
-  const used = Math.max(0, Number(profile.usageUsed || 0));
-  const remain = Math.max(0, limit - used);
-
-  if (remain <= 0) {
-    throw new HttpsError("failed-precondition", "今月の抽選回数は終了しました");
-  }
-
-  await roomRef.set({
-    phase: 1,
-    indexview: -1,
-    updatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  return { ok: true };
-});
-
-exports.stopRoomSpin = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
-
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-
-  if (uid !== roomUid) {
-    const joiningSnap = await db.collection("joining")
-      .where("hostUid", "==", roomUid)
-      .where("status", "==", 2)
-      .get();
-
-    const isSingleParticipant =
-      joiningSnap.size === 1 &&
-      String(joiningSnap.docs[0].data()?.participantUid || "") === uid;
-
-    if (!isSingleParticipant) {
-      throw new HttpsError("permission-denied", "host only");
-    }
-  }
-
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const roomSnap = await roomRef.get();
-
-  if (!roomSnap.exists) {
-    throw new HttpsError("not-found", "room not found");
-  }
-
-  const room = roomSnap.data() || {};
-  const parsed = parseRoomList(room.list);
-
-  const pickedIndex = Number(room.index);
-  if (!Number.isInteger(pickedIndex) || pickedIndex < 0 || pickedIndex >= parsed.length) {
-    throw new HttpsError("failed-precondition", "picked index invalid");
-  }
-
-  const offsetRatio = 0.08 + Math.random() * 0.84;
-  const finalAngle = calcFinalAngleForIndex(parsed, pickedIndex, offsetRatio);
-
-  await roomRef.set({
-    phase: 2,
-    index: pickedIndex,
-    angle: finalAngle,
-    updatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  return { ok: true };
-});
-
-exports.finishRoomSpin = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
-
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  if (uid !== roomUid) {
-    throw new HttpsError("permission-denied", "host only");
-  }
-
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const profileRef = db.collection("spinfate_profiles").doc(uid);
-
-  await db.runTransaction(async (tx) => {
-    const roomSnap = await tx.get(roomRef);
-
-    if (!roomSnap.exists) {
-      throw new HttpsError("not-found", "room not found");
+    if (remain <= 0) {
+      await roomRef.update({ phase: 0, updatedAt: FieldValue.serverTimestamp() });
+      return;
     }
 
-    const room = roomSnap.data() || {};
-    const parsed = parseRoomList(room.list);
-
-    const pickedIndex = Number(room.index);
-    if (!Number.isInteger(pickedIndex) || pickedIndex < 0 || pickedIndex >= parsed.length) {
-      throw new HttpsError("failed-precondition", "picked index invalid");
-    }
-
-    tx.set(profileRef, {
-      usageUsed: FieldValue.increment(1)
-    }, { merge: true });
-
-    tx.set(roomRef, {
-      phase: 0,
-      indexview: pickedIndex,
+    await roomRef.set({
+      phase: 1,
+      indexview: -1,
       updatedAt: FieldValue.serverTimestamp()
     }, { merge: true });
-  });
-
-  return { ok: true };
+  }
 });
 
-exports.requestEntryApproval = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const participantUid = request.auth.uid;
-  const hostUid = String(request.data?.roomUid || "");
+// --- 2. スピン停止トリガー (角度計算) ---
+exports.triggerStopRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
 
-  if (!hostUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  if (participantUid === hostUid) {
-    throw new HttpsError("failed-precondition", "host cannot request own room");
-  }
+  if (before.phase === 1 && after.phase === 2) {
+    const roomRef = event.data.after.ref;
+    const room = after || {};
+    const parsed = parseRoomList(room.list);
+    const pickedIndex = Number(room.index);
 
-  const roomSnap = await db.collection("rooms").doc(hostUid).get();
-  if (!roomSnap.exists) {
-    throw new HttpsError("not-found", "room not found");
-  }
+    if (parsed && Number.isInteger(pickedIndex) && pickedIndex >= 0 && pickedIndex < parsed.length) {
+      const offsetRatio = 0.08 + Math.random() * 0.84;
+      const finalAngle = calcFinalAngleForIndex(parsed, pickedIndex, offsetRatio);
 
-  const profileSnap = await db.collection("spinfate_profiles").doc(participantUid).get();
-  const profile = profileSnap.exists ? (profileSnap.data() || {}) : {};
-
-  const joiningRef = db.collection("joining").doc(`${hostUid}_${participantUid}`);
-  const joiningSnap = await joiningRef.get();
-  const data = joiningSnap.exists ? (joiningSnap.data() || {}) : {};
-  const currentStatus = Number(data.status || 0);
-
-  if (currentStatus === 1) {
-    return { ok: true, status: 1 };
-  }
-  if (currentStatus === 2) {
-    return { ok: true, status: 2 };
-  }
-
-  await joiningRef.set({
-    hostUid,
-    participantUid,
-    status: 1,
-    point: Number(data.point || 0),
-    nick: String(profile.nick || ""),
-    iconUrl: String(profile.iconUrl || "")
-  }, { merge: true });
-
-  return { ok: true, status: 1 };
-});
-
-exports.reviewEntryApproval = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const hostUid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
-  const targetUid = String(request.data?.targetUid || "");
-  const status = Number(request.data?.status || 0);
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  if (hostUid !== roomUid) {
-    throw new HttpsError("permission-denied", "host only");
-  }
-  if (!targetUid) {
-    throw new HttpsError("invalid-argument", "targetUid required");
-  }
-  if (status !== 2 && status !== 3) {
-    throw new HttpsError("invalid-argument", "status invalid");
-  }
-
-  const joiningSnap = await db.collection("joining")
-    .where("hostUid", "==", hostUid)
-    .where("participantUid", "==", targetUid)
-    .limit(1)
-    .get();
-
-  if (joiningSnap.empty) {
-    throw new HttpsError("not-found", "request not found");
-  }
-
-  const ref = joiningSnap.docs[0].ref;
-  const data = joiningSnap.docs[0].data() || {};
-
-  await ref.set({
-    hostUid,
-    participantUid: targetUid,
-    status,
-    point: Number(data.point || 0),
-    reviewedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp()
-  }, { merge: true });
-
-  return { ok: true, status };
-});
-
-exports.savePrizeMaster = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const name = String(request.data?.name || "").trim();
-  const point = Math.max(0, Number(request.data?.point || 0) || 0);
-  const cost = Math.max(0, Number(request.data?.cost || 0) || 0);
-  const exchangeRate = Math.max(0, Math.min(100, Number(request.data?.exchangeRate || 0) || 0));
-  const imageUrl = String(request.data?.imageUrl || "").trim();
-
-  if (!name) {
-    throw new HttpsError("invalid-argument", "name required");
-  }
-
-  const prizeRef = db.collection("prize_masters").doc();
-
-  await prizeRef.set({
-    hostUid: uid,
-    name,
-    point,
-    cost,
-    exchangeRate,
-    imageUrl
-  });
-
-  return { ok: true, prizeMasterId: prizeRef.id };
-});
-
-exports.addMissingPrizeImage = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const imageName = String(request.data?.imageName || "").trim();
-  if (!imageName) {
-    throw new HttpsError("invalid-argument", "imageName required");
-  }
-
-  await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).set({
-    hostUid: uid,
-    imageName
-  }, { merge: true });
-
-  return { ok: true };
-});
-
-exports.clearMissingPrizeImage = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const imageName = String(request.data?.imageName || "").trim();
-  if (!imageName) {
-    throw new HttpsError("invalid-argument", "imageName required");
-  }
-
-  await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).delete();
-  return { ok: true };
-});
-
-exports.listPrizeMasters = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const snap = await db.collection("prize_masters")
-    .where("hostUid", "==", uid)
-    .get();
-
-  const items = snap.docs
-    .map((d) => ({ id: d.id, ...(d.data() || {}) }))
-    .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ja"));
-
-  return { ok: true, items };
-});
-
-exports.deletePrizeMaster = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const prizeId = String(request.data?.prizeId || "");
-
-  if (!prizeId) {
-    throw new HttpsError("invalid-argument", "prizeId required");
-  }
-
-  const ref = db.collection("prize_masters").doc(prizeId);
-  const snap = await ref.get();
-
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "prize not found");
-  }
-
-  const data = snap.data() || {};
-  if (String(data.hostUid || "") !== uid) {
-    throw new HttpsError("permission-denied", "host only");
-  }
-
-  await ref.delete();
-  return { ok: true };
-});
-
-exports.listMissingPrizeImages = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const [missingSnap, prizeSnap] = await Promise.all([
-    db.collection("missing_prize_images")
-      .where("hostUid", "==", uid)
-      .get(),
-    db.collection("prize_masters")
-      .where("hostUid", "==", uid)
-      .get()
-  ]);
-
-  const map = new Map();
-
-  missingSnap.docs.forEach((d) => {
-    const data = d.data() || {};
-    const imageName = String(data.imageName || "").trim();
-    if (!imageName) return;
-
-    map.set(imageName, {
-      id: d.id,
-      hostUid: uid,
-      imageName
-    });
-  });
-
-  prizeSnap.docs.forEach((d) => {
-    const data = d.data() || {};
-    const imageUrl = String(data.imageUrl || "").trim();
-    if (!imageUrl.startsWith("__missing__:")) return;
-
-    const imageName = imageUrl.slice("__missing__:".length).trim();
-    if (!imageName) return;
-
-    if (!map.has(imageName)) {
-      map.set(imageName, {
-        id: `${uid}_${imageName}`,
-        hostUid: uid,
-        imageName
+      await roomRef.update({
+        phase: 2,
+        index: pickedIndex,
+        angle: finalAngle,
+        updatedAt: FieldValue.serverTimestamp()
       });
     }
-  });
-
-  const items = Array.from(map.values())
-    .sort((a, b) => String(a.imageName || "").localeCompare(String(b.imageName || ""), "ja"));
-
-  return { ok: true, items };
+  }
 });
 
-exports.applyPrizeImage = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
+// --- 3. スピン完了トリガー (トランザクション処理) ---
+exports.triggerFinishRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
+  const before = event.data.before.data();
+  const after = event.data.after.data();
+
+  if (before.phase === 2 && after.phase === 0) {
+    const roomUid = event.params.roomUid;
+    const roomRef = event.data.after.ref;
+    const profileRef = db.collection("spinfate_profiles").doc(roomUid);
+
+    await db.runTransaction(async (tx) => {
+      const roomSnap = await tx.get(roomRef);
+      if (!roomSnap.exists) return;
+
+      const room = roomSnap.data() || {};
+      const pickedIndex = Number(room.index);
+      const parsed = parseRoomList(room.list);
+
+      if (parsed && Number.isInteger(pickedIndex) && pickedIndex >= 0 && pickedIndex < parsed.length) {
+        tx.set(profileRef, {
+          usageUsed: FieldValue.increment(1)
+        }, { merge: true });
+
+        tx.set(roomRef, {
+          indexview: pickedIndex,
+          updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+    });
   }
-  const uid = request.auth.uid;
+});
 
-  const imageName = String(request.data?.imageName || "").trim();
-  const imageUrl = String(request.data?.imageUrl || "").trim();
-
-  if (!imageName) {
-    throw new HttpsError("invalid-argument", "imageName required");
+// --- 4. 参加申請 (entry_requests) ---
+exports.requestEntryApproval = onDocumentCreated("entry_requests/{docId}", async (event) => {
+  const { participantUid, roomUid } = event.data.data();
+  const roomSnap = await db.collection("rooms").doc(roomUid).get();
+  if (!roomSnap.exists) {
+    await event.data.ref.delete();
+    return;
   }
-  if (!imageUrl) {
-    throw new HttpsError("invalid-argument", "imageUrl required");
+  const profileSnap = await db.collection("spinfate_profiles").doc(participantUid).get();
+  const profile = profileSnap.exists ? profileSnap.data() : {};
+  const joiningRef = db.collection("joining").doc(`${roomUid}_${participantUid}`);
+  const joiningSnap = await joiningRef.get();
+  const data = joiningSnap.exists ? joiningSnap.data() : {};
+
+  if (Number(data.status || 0) < 1) {
+    await joiningRef.set({
+      hostUid: roomUid,
+      participantUid,
+      status: 1,
+      nick: String(profile.nick || ""),
+      iconUrl: String(profile.iconUrl || ""),
+      updatedAt: FieldValue.serverTimestamp()
+    }, { merge: true });
   }
+  await event.data.ref.delete();
+});
 
-  const storagePath = `prize_masters/${uid}/${imageName}.webp`;
-  const encodedPath = encodeURIComponent(storagePath);
+// --- 5. 承認処理 (review_requests) ---
+exports.reviewEntryApprovalTrigger = onDocumentCreated("review_requests/{docId}", async (event) => {
+  const { roomUid, targetUid, status } = event.data.data();
+  const snap = await db.collection("joining")
+    .where("hostUid", "==", roomUid)
+    .where("participantUid", "==", targetUid)
+    .limit(1).get();
 
-  const snap = await db.collection("prize_masters")
-    .where("hostUid", "==", uid)
-    .get();
+  if (!snap.empty) {
+    await snap.docs[0].ref.update({
+      status,
+      reviewedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  }
+  await event.data.ref.delete();
+});
 
+// --- 6. 景品保存 (savePrizeMaster) ---
+exports.savePrizeMaster = onCall({ cors: true }, async (request) => {
+  if (!request.auth) throw new HttpsError("unauthenticated", "login required");
+  const d = request.data;
+  await db.collection("prize_masters").add({
+    hostUid: request.auth.uid,
+    name: String(d.name || "").trim(),
+    point: Number(d.point || 0),
+    cost: Number(d.cost || 0),
+    exchangeRate: Number(d.exchangeRate || 0),
+    imageUrl: String(d.imageUrl || ""),
+    createdAt: FieldValue.serverTimestamp()
+  });
+  return { ok: true };
+});
+
+// --- 7. 画像適用リクエスト ---
+exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_apply_requests/{requestId}", async (event) => {
+  const { imageName, imageUrl } = event.data.data();
+  const uid = event.params.uid;
   const batch = db.batch();
+  const snap = await db.collection("prize_masters").where("hostUid", "==", uid).get();
 
-  snap.docs.forEach((docSnap) => {
-    const data = docSnap.data() || {};
-    const currentUrl = String(data.imageUrl || "");
-    if (
-      currentUrl === `__missing__:${imageName}` ||
-      currentUrl.includes(`${imageName}.webp`)
-    ) {
-      batch.set(docSnap.ref, { imageUrl }, { merge: true });
+  snap.docs.forEach(doc => {
+    const cur = String(doc.data().imageUrl || "");
+    if (cur === `__missing__:${imageName}` || cur.includes(`${imageName}.webp`)) {
+      batch.update(doc.ref, { imageUrl });
     }
   });
-
   batch.delete(db.collection("missing_prize_images").doc(`${uid}_${imageName}`));
   await batch.commit();
-
-  return { ok: true };
 });
 
-exports.listPrizeImages = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-
-  const snap = await db.collection("prize_masters")
-    .where("hostUid", "==", uid)
-    .get();
-
-  const map = new Map();
-
-  snap.docs.forEach((docSnap) => {
-    const data = docSnap.data() || {};
-    const imageUrl = String(data.imageUrl || "").trim();
-
-    if (!imageUrl || imageUrl.startsWith("__missing__:")) {
-      return;
-    }
-
-    let imageName = "";
-
-    try {
-      const u = new URL(imageUrl);
-      const m = u.pathname.match(/\/o\/(.+)$/);
-      const storagePath = m ? decodeURIComponent(m[1]) : "";
-      const fileName = storagePath.split("/").pop() || "";
-      imageName = fileName.replace(/\.webp$/i, "");
-    } catch {
-      imageName = "";
-    }
-
-    if (!imageName) {
-      return;
-    }
-
-    if (!map.has(imageName)) {
-      map.set(imageName, {
-        imageName,
-        imageUrl
-      });
-    }
-  });
-
-  const items = Array.from(map.values())
-    .sort((a, b) => String(a.imageName || "").localeCompare(String(b.imageName || ""), "ja"));
-
-  return { ok: true, items };
-});
-
-exports.deletePrizeImage = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const imageName = String(request.data?.imageName || "").trim();
-
-  if (!imageName) {
-    throw new HttpsError("invalid-argument", "imageName required");
-  }
-
+// --- 8. 画像削除リクエスト ---
+exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion_requests/{requestId}", async (event) => {
+  const { imageName } = event.data.data();
+  const uid = event.params.uid;
   const storagePath = `prize_masters/${uid}/${imageName}.webp`;
 
   try {
-    const bucket = process.env.FUNCTIONS_EMULATOR
-      ? admin.storage().bucket()
-      : admin.storage().bucket("spinfate1.appspot.com");
-
+    const bucket = admin.storage().bucket();
     await bucket.file(storagePath).delete();
   } catch (e) {
-    if (e.code !== 404) throw e;
+    if (e.code !== 404) console.error(e);
   }
-
-  const imageUrlPrefix = `https://firebasestorage.googleapis.com/`;
-  const snap = await db.collection("prize_masters")
-    .where("hostUid", "==", uid)
-    .get();
 
   const batch = db.batch();
-
-  snap.docs.forEach((docSnap) => {
-    const data = docSnap.data() || {};
-    const imageUrl = String(data.imageUrl || "");
-    if (
-      imageUrl === `__missing__:${imageName}` ||
-      imageUrl.includes(encodeURIComponent(storagePath)) ||
-      imageUrl.includes(`${imageName}.webp`)
-    ) {
-      batch.set(docSnap.ref, { imageUrl: `__missing__:${imageName}` }, { merge: true });
-      batch.set(
-        db.collection("missing_prize_images").doc(`${uid}_${imageName}`),
-        { hostUid: uid, imageName },
-        { merge: true }
-      );
+  const snap = await db.collection("prize_masters").where("hostUid", "==", uid).get();
+  snap.docs.forEach(doc => {
+    if (String(doc.data().imageUrl).includes(`${imageName}.webp`)) {
+      batch.update(doc.ref, { imageUrl: `__missing__:${imageName}` });
     }
   });
+  batch.set(db.collection("missing_prize_images").doc(`${uid}_${imageName}`), { hostUid: uid, imageName, createdAt: FieldValue.serverTimestamp() }, { merge: true });
+  batch.delete(db.collection("users").doc(uid).collection("images").doc(imageName));
   await batch.commit();
-  await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).set({
-    hostUid: uid,
-    imageName
-  }, { merge: true });
-  return { ok: true };
 });
 
-exports.saveRoomConfig = onCall({ cors: true }, async (request) => {
-  if (!request.auth) {
-    throw new HttpsError("unauthenticated", "login required");
-  }
-  const uid = request.auth.uid;
-  const roomUid = String(request.data?.roomUid || "");
+// --- 9. 不足画像リクエスト ---
+exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_image_requests/{requestId}", async (event) => {
+  const { imageName } = event.data.data();
+  await db.collection("missing_prize_images").doc(`${event.params.uid}_${imageName}`).set({
+    hostUid: event.params.uid,
+    imageName,
+    createdAt: FieldValue.serverTimestamp()
+  }, { merge: true });
+});
 
-  if (!roomUid) {
-    throw new HttpsError("invalid-argument", "roomUid required");
-  }
-  if (uid !== roomUid) {
-    throw new HttpsError("permission-denied", "host only");
-  }
+// --- 10. 同期トリガー群 ---
+exports.onPrizeMasterCreated = onDocumentCreated("prize_masters/{id}", async (e) => {
+  await db.collection("users").doc(e.data.data().hostUid).collection("prizes").doc(e.params.id).set(e.data.data());
+});
 
-  const title = String(request.data?.title || "").trim();
-  const description = String(request.data?.description || "");
-  const list = String(request.data?.list || "[]");
-  const drawMode = String(request.data?.drawMode || "A"); 
-  const maxSlots = Math.max(0, Number(request.data?.maxSlots) || 0);
-  const userMax = Math.max(0, Number(request.data?.userMax) || 0);
-  const targetPrizeId = String(request.data?.targetPrizeId || "").trim();
-  const point = Math.max(0, Number(request.data?.point || 0) || 0);
+exports.onMissingPrizeMasterCreated = onDocumentCreated("missing_prize_images/{id}", async (e) => {
+  await db.collection("users").doc(e.data.data().hostUid).collection("missing_images").doc(e.params.id).set(e.data.data());
+});
 
-  let parsed;
+exports.onMissingPrizeMasterDeleted = onDocumentDeleted("missing_prize_images/{id}", async (e) => {
+  await db.collection("users").doc(e.data.data().hostUid).collection("missing_images").doc(e.params.id).delete();
+});
+
+exports.onPrizeImageSync = onDocumentCreated("prize_masters/{id}", async (e) => {
+  const d = e.data.data();
+  if (!d.imageUrl || d.imageUrl.startsWith("__missing__:")) return;
   try {
-    parsed = JSON.parse(list);
-  } catch {
-    throw new HttpsError("invalid-argument", "invalid list");
-  }
+    const u = new URL(d.imageUrl);
+    const m = u.pathname.match(/\/o\/(.+)$/);
+    const name = decodeURIComponent(m[1]).split("/").pop().replace(/\.webp$/i, "");
+    await db.collection("users").doc(d.hostUid).collection("images").doc(name).set({
+      imageName: name,
+      imageUrl: d.imageUrl,
+      updatedAt: FieldValue.serverTimestamp()
+    });
+  } catch (err) {}
+});
 
-  if (!Array.isArray(parsed) || parsed.length === 0) {
-    throw new HttpsError("invalid-argument", "list required");
-  }
+// --- 11. ルーム設定リクエスト ---
+exports.onRoomConfigRequested = onDocumentCreated("users/{uid}/room_config_requests/{requestId}", async (event) => {
+  const data = event.data.data();
+  const parsed = parseRoomList(data.list);
+  if (!parsed) return;
 
-  const roomRef = db.collection("rooms").doc(roomUid);
-  const profileRef = db.collection("spinfate_profiles").doc(uid);
-  const profileSnap = await profileRef.get();
+  const profileSnap = await db.collection("spinfate_profiles").doc(data.roomUid).get();
   const profile = profileSnap.exists ? profileSnap.data() : {};
 
-  const nextIndex = (() => {
-    const total = parsed.reduce((s, x) => s + Math.max(1, Number(x[1] || 1)), 0);
-    let r = Math.random() * total;
-    for (let i = 0; i < parsed.length; i++) {
-      r -= Math.max(1, Number(parsed[i][1] || 1));
-      if (r < 0) return i;
-    }
-    return parsed.length - 1;
-  })();
-
-  await roomRef.set({
+  await db.collection("rooms").doc(data.roomUid).set({
+    ...data,
     angle: 0,
-    hostIconUrl: String(profile?.iconUrl || ""),
-    hostNick: String(profile?.nick || ""),
-    description,
-    list,
     phase: 0,
-    index: nextIndex,
-    title,
-    targetPrizeId,
-    point,
-    updatedAt: FieldValue.serverTimestamp(),
-    drawMode,
-    maxSlots,
-    userMax,
-    filledSlots: 0
+    index: pickWeightedIndex(parsed),
+    hostIconUrl: String(profile.iconUrl || ""),
+    hostNick: String(profile.nick || ""),
+    updatedAt: FieldValue.serverTimestamp()
   }, { merge: true });
+});
 
-  return { ok: true };
+exports.onMissingImageDeletionRequested = onDocumentCreated("users/{uid}/missing_image_deletion_requests/{requestId}", async (event) => {
+  const data = event.data.data();
+  if (!data) return;
+  
+  const uid = event.params.uid;
+  const imageName = String(data.imageName || "").trim();
+  if (!imageName) return;
+
+  // データベース上の不足画像データを削除する
+  await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).delete();
+  
+  // 処理済みのリクエストを削除して整理する
+  await event.data.ref.delete();
 });
