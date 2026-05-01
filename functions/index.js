@@ -181,11 +181,11 @@ exports.reviewEntryApprovalTrigger = onDocumentCreated("review_requests/{docId}"
 });
 
 // --- 6. 景品保存 (savePrizeMaster) ---
-exports.savePrizeMaster = onCall({ cors: true }, async (request) => {
-  if (!request.auth) throw new HttpsError("unauthenticated", "login required");
-  const d = request.data;
+exports.onPrizeMasterRequested = onDocumentCreated("users/{uid}/prize_master_requests/{requestId}", async (event) => {
+  const d = event.data.data();
+  const uid = event.params.uid;
   await db.collection("prize_masters").add({
-    hostUid: request.auth.uid,
+    hostUid: uid,
     name: String(d.name || "").trim(),
     point: Number(d.point || 0),
     cost: Number(d.cost || 0),
@@ -193,7 +193,7 @@ exports.savePrizeMaster = onCall({ cors: true }, async (request) => {
     imageUrl: String(d.imageUrl || ""),
     createdAt: FieldValue.serverTimestamp()
   });
-  return { ok: true };
+  await event.data.ref.delete();
 });
 
 // --- 7. 画像適用リクエスト ---
@@ -307,5 +307,15 @@ exports.onMissingImageDeletionRequested = onDocumentCreated("users/{uid}/missing
   if (!imageName) return;
 
   await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).delete();
+  await event.data.ref.delete();
+});
+
+exports.onPrizeDeletionRequested = onDocumentCreated("users/{uid}/prize_deletion_requests/{requestId}", async (event) => {
+  const { prizeId } = event.data.data();
+  const uid = event.params.uid;
+
+  if (!prizeId) return;
+
+  await db.collection("prize_masters").doc(prizeId).delete();
   await event.data.ref.delete();
 });

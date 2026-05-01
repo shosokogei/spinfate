@@ -21,7 +21,8 @@ import {
   query,
   where,
   getDocs,
-  limit
+  limit,
+  addDoc
 } from "/js/firebase/firebase-firestore.js";
 import {
   getStorage,
@@ -387,6 +388,14 @@ function stopRaf() {
 function scheduleTick() {
   if (state.wheel.rafId) return;
   state.wheel.rafId = requestAnimationFrame(tick);
+}
+
+async function finishRoomSpin({ roomUid }) {
+  const roomRef = doc(db, "rooms", roomUid);
+  await updateDoc(roomRef, {
+    phase: 0,
+    updatedAt: serverTimestamp()
+  });
 }
 
 function tick() {
@@ -1063,7 +1072,7 @@ function subscribeHostEntryRequests() {
 
 async function requestEntryApproval() {
   if (!isRoomPage || !state.me || isHost()) return;
-  setDoc(doc(db, "temp_entry_requests", state.me.uid), { roomUid: roomUid, createdAt: serverTimestamp() });
+  await setDoc(doc(db, "entry_requests", state.me.uid), { roomUid: roomUid, createdAt: serverTimestamp() });
 }
 
 async function fetchAddressByPostal(postal) {
@@ -1233,13 +1242,14 @@ async function savePrizeMaster() {
   }
 
   // データベース操作を直接行わず、サーバー側の関数を呼び出す
-  const savePrizeFn = httpsCallable(functions, "savePrizeMaster");
-  await savePrizeFn({
+  const requestRef = collection(db, "users", state.me.uid, "prize_master_requests");
+  await addDoc(requestRef, {
     name,
     point,
     cost,
     exchangeRate,
-    imageUrl
+    imageUrl,
+    createdAt: serverTimestamp()
   });
 
   // UIの初期化
@@ -1320,8 +1330,7 @@ async function savePrizeMastersCsv() {
       }
     }
 
-    await addDoc(collection(db, "prize_masters"), {
-      hostUid: state.me.uid,
+    await addDoc(collection(db, "users", state.me.uid, "prize_master_requests"), {
       name,
       point,
       cost,
@@ -1440,7 +1449,7 @@ async function refreshPrizeAdminData() {
     renderMissingImageBadges();
     return;
   }
-  // httpsCallableを排除し、Firestoreへ直接クエリを発行します
+
   const [prizeSnap, imageSnap, missingSnap] = await Promise.all([
     getDocs(collection(db, "users", state.me.uid, "prizes")),
     getDocs(collection(db, "users", state.me.uid, "images")),
@@ -1598,10 +1607,6 @@ dom.centerBtn.addEventListener("click", async () => {
     if (isHostPage && state.repeatConfirmNeeded) {
       const ok = confirm("前回と同じ内容で抽選をしますか？");
       if (!ok) return;
-      await addDoc(collection(db, "spin_requests"), {
-        roomUid: roomUid,
-        createdAt: serverTimestamp()
-      });
       state.repeatConfirmNeeded = false;
       return;
     }
@@ -1695,16 +1700,15 @@ dom.btnPlus.addEventListener("click", async () => {
   await refreshPrizeAdminData();
   await refreshApprovedUsers();
   fillItemEditorFromRoom();
-  if (!dom.itemList.children.length) {
-    addItemRow();
-  }
   openModal(dom.modalBack);
 });
+
 document.getElementById("editDrawMode").addEventListener("change", () => {
   if (!state.room) state.room = {};
   state.room.drawMode = document.getElementById("editDrawMode").value;
   fillItemEditorFromRoom();
 });
+
 dom.modalClose.addEventListener("click", () => closeModal(dom.modalBack));
 dom.btnCancel.addEventListener("click", () => closeModal(dom.modalBack));
 dom.btnAdd.addEventListener("click", () => {
@@ -1712,6 +1716,7 @@ dom.btnAdd.addEventListener("click", () => {
   const mode = document.getElementById("editDrawMode").value;
   dom.itemList.appendChild(makeItemRow("", 1, getNextItemColor(idx), mode));
 });
+
 dom.btnSave.addEventListener("click", () => {
   saveRoomFromEditor().catch((e) => alert(e?.message || "保存に失敗しました"));
 });
