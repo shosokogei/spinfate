@@ -1,4 +1,4 @@
-import { initializeApp } from "/js/firebase/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.7.1/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged,
@@ -7,7 +7,7 @@ import {
   signOut,
   updateProfile,
   connectAuthEmulator
-} from "/js/firebase/firebase-auth.js";
+} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-auth.js";
 import {
   getFirestore,
   doc,
@@ -23,14 +23,14 @@ import {
   getDocs,
   limit,
   addDoc
-} from "/js/firebase/firebase-firestore.js";
+} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-firestore.js";
 import {
   getStorage,
   ref,
   uploadBytes,
   getDownloadURL,
   connectStorageEmulator
-} from "/js/firebase/firebase-storage.js";
+} from "https://www.gstatic.com/firebasejs/11.7.1/firebase-storage.js";
 
 async function reviewEntryApproval({ roomUid, targetUid, status }) {
   await setDoc(doc(db, "review_requests", `${roomUid}_${targetUid}`), {
