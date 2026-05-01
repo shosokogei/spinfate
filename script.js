@@ -583,7 +583,15 @@ function renderUser() {
   if (!state.me) {
     dom.btnLogin.style.display = "inline-flex";
     dom.userBox.style.display = "none";
-    dom.btnGoRoom.style.display = "none";
+    if (!isFree && isTopPage) {
+      dom.btnGoRoom.style.display = "inline-flex";
+      dom.btnGoRoom.textContent = "HOST";
+    } else if (!isFree && isHostPage && isOwner) {
+      dom.btnGoRoom.style.display = "inline-flex";
+      dom.btnGoRoom.textContent = "Top";
+    } else {
+      dom.btnGoRoom.style.display = "none";
+    }
     dom.btnPrizeList.style.display = "none";
     dom.btnPrizeImageList.style.display = "none";
     // トップページならボタンを表示、それ以外は非表示
