@@ -602,6 +602,12 @@ function renderUser() {
   dom.btnPrizeList.style.display = (isOwner && !isFree) ? "block" : "none";
   dom.btnPrizeImageList.style.display = (isOwner && !isFree) ? "flex" : "none";
 
+  const nick = state.myProfile?.nick || "USER";
+  const iconUrl = state.myProfile?.iconUrl || "";
+  dom.userTag.textContent = nick;
+  setImage(dom.userIcon, iconUrl);
+  dom.userIcon.style.display = iconUrl ? "block" : "none";
+
   renderEntryRequestUi();
 }
 
