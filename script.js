@@ -579,7 +579,6 @@ function renderUser() {
   const isTopPage = !isRoomPage && !isHostPage;
   const isOwner = isHost();
   const isFree = isFreePlan();
-
   // 1. 基本的なユーザー情報の表示/非表示
   if (!state.me) {
     dom.btnLogin.style.display = "inline-flex";
@@ -587,7 +586,6 @@ function renderUser() {
     dom.btnGoRoom.style.display = "none";
     dom.btnPrizeList.style.display = "none";
     dom.btnPrizeImageList.style.display = "none";
-    
     // トップページならボタンを表示、それ以外は非表示
     dom.btnPlus.style.display = isTopPage ? "inline-flex" : "none";
     return;
@@ -595,7 +593,6 @@ function renderUser() {
 
   dom.btnLogin.style.display = "none";
   dom.userBox.style.display = "flex";
-
   // 2. 権限に基づく制御
   // トップページはデモとして編集可。それ以外はホスト本人かつ有料プランのみ可。
   const canEditItems = isTopPage || (isOwner && !isFree);

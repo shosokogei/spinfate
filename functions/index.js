@@ -8,7 +8,6 @@ if (!admin.apps.length) {
 const db = admin.firestore();
 
 // --- ユーティリティ関数（ロジック完全維持） ---
-
 function parseRoomList(list) {
   let parsed;
   try {
@@ -48,7 +47,6 @@ function calcFinalAngleForIndex(parsed, index, offsetRatio = 0.5) {
   }
   return 0;
 }
-
 // --- 1. スピン開始トリガー (制限チェック込) ---
 exports.triggerStartRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
   const before = event.data.before.data();
@@ -77,7 +75,6 @@ exports.triggerStartRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event
     }, { merge: true });
   }
 });
-
 // --- 2. スピン停止トリガー (角度計算) ---
 exports.triggerStopRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
   const before = event.data.before.data();
@@ -102,7 +99,6 @@ exports.triggerStopRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event)
     }
   }
 });
-
 // --- 3. スピン完了トリガー (トランザクション処理) ---
 exports.triggerFinishRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (event) => {
   const before = event.data.before.data();
@@ -134,7 +130,6 @@ exports.triggerFinishRoomSpin = onDocumentUpdated("rooms/{roomUid}", async (even
     });
   }
 });
-
 // --- 4. 参加申請 (entry_requests) ---
 exports.requestEntryApproval = onDocumentCreated("entry_requests/{docId}", async (event) => {
   const { participantUid, roomUid } = event.data.data();
@@ -161,7 +156,6 @@ exports.requestEntryApproval = onDocumentCreated("entry_requests/{docId}", async
   }
   await event.data.ref.delete();
 });
-
 // --- 5. 承認処理 (review_requests) ---
 exports.reviewEntryApprovalTrigger = onDocumentCreated("review_requests/{docId}", async (event) => {
   const { roomUid, targetUid, status } = event.data.data();
@@ -179,7 +173,6 @@ exports.reviewEntryApprovalTrigger = onDocumentCreated("review_requests/{docId}"
   }
   await event.data.ref.delete();
 });
-
 // --- 6. 景品保存 (savePrizeMaster) ---
 exports.onPrizeMasterRequested = onDocumentCreated("users/{uid}/prize_master_requests/{requestId}", async (event) => {
   const d = event.data.data();
@@ -195,7 +188,6 @@ exports.onPrizeMasterRequested = onDocumentCreated("users/{uid}/prize_master_req
   });
   await event.data.ref.delete();
 });
-
 // --- 7. 画像適用リクエスト ---
 exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_apply_requests/{requestId}", async (event) => {
   const { imageName, imageUrl } = event.data.data();
@@ -212,7 +204,6 @@ exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_
   batch.delete(db.collection("missing_prize_images").doc(`${uid}_${imageName}`));
   await batch.commit();
 });
-
 // --- 8. 画像削除リクエスト ---
 exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion_requests/{requestId}", async (event) => {
   const { imageName } = event.data.data();
@@ -237,7 +228,6 @@ exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion
   batch.delete(db.collection("users").doc(uid).collection("images").doc(imageName));
   await batch.commit();
 });
-
 // --- 9. 不足画像リクエスト ---
 exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_image_requests/{requestId}", async (event) => {
   const { imageName } = event.data.data();
@@ -247,7 +237,6 @@ exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_im
     createdAt: FieldValue.serverTimestamp()
   }, { merge: true });
 });
-
 // --- 10. 同期トリガー群 ---
 exports.onPrizeMasterCreated = onDocumentCreated("prize_masters/{id}", async (e) => {
   await db.collection("users").doc(e.data.data().hostUid).collection("prizes").doc(e.params.id).set(e.data.data());
@@ -275,7 +264,6 @@ exports.onPrizeImageSync = onDocumentCreated("prize_masters/{id}", async (e) => 
     });
   } catch (err) {}
 });
-
 // --- 11. ルーム設定リクエスト ---
 exports.onRoomConfigRequested = onDocumentCreated("users/{uid}/room_config_requests/{requestId}", async (event) => {
   const data = event.data.data();
