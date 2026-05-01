@@ -579,36 +579,35 @@ function renderUser() {
   const isTopPage = !isRoomPage && !isHostPage;
   const isOwner = isHost();
   const isFree = isFreePlan();
-  // 1. 基本的なユーザー情報の表示/非表示
+
   if (!state.me) {
     dom.btnLogin.style.display = "inline-flex";
     dom.userBox.style.display = "none";
-    if (!isFree && isTopPage) {
-      dom.btnGoRoom.style.display = "inline-flex";
-      dom.btnGoRoom.textContent = "HOST";
-    } else if (!isFree && isHostPage && isOwner) {
-      dom.btnGoRoom.style.display = "inline-flex";
-      dom.btnGoRoom.textContent = "Top";
-    } else {
-      dom.btnGoRoom.style.display = "none";
-    }
+    dom.btnGoRoom.style.display = "none";
     dom.btnPrizeList.style.display = "none";
     dom.btnPrizeImageList.style.display = "none";
-    // トップページならボタンを表示、それ以外は非表示
     dom.btnPlus.style.display = isTopPage ? "inline-flex" : "none";
     return;
   }
 
   dom.btnLogin.style.display = "none";
   dom.userBox.style.display = "flex";
-  // 2. 権限に基づく制御
-  // トップページはデモとして編集可。それ以外はホスト本人かつ有料プランのみ可。
-  const canEditItems = isTopPage || (isOwner && !isFree);
 
+  const canEditItems = isTopPage || (isOwner && !isFree);
   dom.btnPrize.style.display = (isOwner && !isFree) ? "inline-flex" : "none";
   dom.btnPlus.style.display = canEditItems ? "inline-flex" : "none";
   dom.btnPrizeList.style.display = (isOwner && !isFree) ? "block" : "none";
   dom.btnPrizeImageList.style.display = (isOwner && !isFree) ? "flex" : "none";
+
+  if (isTopPage && !isFree) {
+    dom.btnGoRoom.style.display = "inline-flex";
+    dom.btnGoRoom.textContent = "HOST";
+  } else if (isHostPage && isOwner) {
+    dom.btnGoRoom.style.display = "inline-flex";
+    dom.btnGoRoom.textContent = "Top";
+  } else {
+    dom.btnGoRoom.style.display = "none";
+  }
 
   const nick = state.myProfile?.nick || "USER";
   const iconUrl = state.myProfile?.iconUrl || "";
