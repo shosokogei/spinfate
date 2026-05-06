@@ -231,11 +231,15 @@ exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion
 // --- 9. 不足画像リクエスト ---
 exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_image_requests/{requestId}", async (event) => {
   const { imageName } = event.data.data();
-  await db.collection("missing_prize_images").doc(`${event.params.uid}_${imageName}`).set({
-    hostUid: event.params.uid,
+  const uid = event.params.uid;
+  
+  await db.collection("missing_prize_images").doc(`${uid}_${imageName}`).set({
+    hostUid: uid,
     imageName,
     createdAt: FieldValue.serverTimestamp()
   }, { merge: true });
+  
+  await event.data.ref.delete();
 });
 // --- 10. 同期トリガー群 ---
 exports.onPrizeMasterCreated = onDocumentCreated("prize_masters/{id}", async (e) => {
