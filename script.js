@@ -1978,6 +1978,7 @@ dom.confirmOk.addEventListener("click", async () => {
   state.pendingConfirm = null;
   if (fn) {
     await fn();
+    await new Promise(resolve => setTimeout(resolve, 1500));
     await refreshPrizeAdminData();
   }
 });
