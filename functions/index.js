@@ -311,3 +311,9 @@ exports.onPrizeDeletionRequested = onDocumentCreated("users/{uid}/prize_deletion
   await db.collection("prize_masters").doc(prizeId).delete();
   await event.data.ref.delete();
 });
+
+exports.onPrizeMasterDeleted = onDocumentDeleted("prize_masters/{id}", async (e) => {
+  const d = e.data.data();
+  if (!d?.hostUid) return;
+  await db.collection("users").doc(d.hostUid).collection("prizes").doc(e.params.id).delete();
+});
