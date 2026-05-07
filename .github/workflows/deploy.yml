@@ -27,4 +27,4 @@ jobs:
         continue-on-error: true
   
       - name: Deploy to Firebase (Hosting + Functions)
-        run: npx firebase-tools@latest deploy --only hosting,functions --project spinfate1 --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
+        run: npx firebase-tools@latest deploy --only hosting,functions --project spinfate1 --non-interactive --force --token "${{ secrets.FIREBASE_TOKEN }}"
