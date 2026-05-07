@@ -1461,9 +1461,9 @@ async function refreshPrizeAdminData() {
   }
 
   const [prizeSnap, imageSnap, missingSnap] = await Promise.all([
-    getDocs(collection(db, "users", state.me.uid, "prizes")),
-    getDocs(collection(db, "users", state.me.uid, "images")),
-    getDocs(collection(db, "users", state.me.uid, "missing_images"))
+    getDocs(query(collection(db, "prize_masters"), where("hostUid", "==", state.me.uid))),
+    getDocs(query(collection(db, "users", state.me.uid, "images"))),
+    getDocs(query(collection(db, "missing_prize_images"), where("hostUid", "==", state.me.uid)))
   ]);
 
   state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
