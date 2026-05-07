@@ -22,8 +22,9 @@ jobs:
         run: npm ci
         working-directory: functions
 
-      - name: Deploy to Firebase (Hosting + Functions)
-        run: npx firebase-tools@latest deploy --only hosting,functions --project spinfate1 --non-interactive --force --token "${{ secrets.FIREBASE_TOKEN }}"
+      - name: Delete old functions
+        run: npx firebase-tools@latest functions:delete onPrizeImageSync --region us-central1 --project spinfate1 --force --token "${{ secrets.FIREBASE_TOKEN }}"
+        continue-on-error: true
   
       - name: Deploy to Firebase (Hosting + Functions)
         run: npx firebase-tools@latest deploy --only hosting,functions --project spinfate1 --non-interactive --token "${{ secrets.FIREBASE_TOKEN }}"
