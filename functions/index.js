@@ -203,6 +203,7 @@ exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_
   });
   batch.delete(db.collection("missing_prize_images").doc(`${uid}_${imageName}`));
   await batch.commit();
+  await event.data.ref.delete();
 });
 // --- 8. 画像削除リクエスト ---
 exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion_requests/{requestId}", async (event) => {
@@ -240,18 +241,6 @@ exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_im
   }, { merge: true });
   
   await event.data.ref.delete();
-});
-// --- 10. 同期トリガー群 ---
-exports.onPrizeMasterCreated = onDocumentCreated("prize_masters/{id}", async (e) => {
-  await db.collection("users").doc(e.data.data().hostUid).collection("prizes").doc(e.params.id).set(e.data.data());
-});
-
-exports.onMissingPrizeMasterCreated = onDocumentCreated("missing_prize_images/{id}", async (e) => {
-  await db.collection("users").doc(e.data.data().hostUid).collection("missing_images").doc(e.params.id).set(e.data.data());
-});
-
-exports.onMissingPrizeMasterDeleted = onDocumentDeleted("missing_prize_images/{id}", async (e) => {
-  await db.collection("users").doc(e.data.data().hostUid).collection("missing_images").doc(e.params.id).delete();
 });
 
 exports.onPrizeImageSync = onDocumentCreated("prize_masters/{id}", async (e) => {
@@ -310,10 +299,4 @@ exports.onPrizeDeletionRequested = onDocumentCreated("users/{uid}/prize_deletion
 
   await db.collection("prize_masters").doc(prizeId).delete();
   await event.data.ref.delete();
-});
-
-exports.onPrizeMasterDeleted = onDocumentDeleted("prize_masters/{id}", async (e) => {
-  const d = e.data.data();
-  if (!d?.hostUid) return;
-  await db.collection("users").doc(d.hostUid).collection("prizes").doc(e.params.id).delete();
 });
