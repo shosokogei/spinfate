@@ -184,6 +184,7 @@ exports.onPrizeMasterRequested = onDocumentCreated("users/{uid}/prize_master_req
     cost: Number(d.cost || 0),
     exchangeRate: Number(d.exchangeRate || 0),
     imageUrl: String(d.imageUrl || ""),
+    imageName: String(d.imageName || ""),
     createdAt: FieldValue.serverTimestamp()
   });
   await event.data.ref.delete();
@@ -198,7 +199,7 @@ exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_
   snap.docs.forEach(doc => {
     const cur = String(doc.data().imageUrl || "");
     if (cur === `__missing__:${imageName}` || cur.includes(`${imageName}.webp`)) {
-      batch.update(doc.ref, { imageUrl });
+      batch.update(doc.ref, { imageUrl, imageName });
     }
   });
   batch.delete(db.collection("missing_prize_images").doc(`${uid}_${imageName}`));
@@ -226,7 +227,6 @@ exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion
     }
   });
   batch.set(db.collection("missing_prize_images").doc(`${uid}_${imageName}`), { hostUid: uid, imageName, createdAt: FieldValue.serverTimestamp() }, { merge: true });
-  batch.delete(db.collection("users").doc(uid).collection("images").doc(imageName));
   await batch.commit();
 });
 // --- 9. 不足画像リクエスト ---
@@ -241,21 +241,6 @@ exports.onMissingPrizeRequestCreated = onDocumentCreated("users/{uid}/missing_im
   }, { merge: true });
   
   await event.data.ref.delete();
-});
-
-exports.onPrizeImageSync = onDocumentCreated("prize_masters/{id}", async (e) => {
-  const d = e.data.data();
-  if (!d.imageUrl || d.imageUrl.startsWith("__missing__:")) return;
-  try {
-    const u = new URL(d.imageUrl);
-    const m = u.pathname.match(/\/o\/(.+)$/);
-    const name = decodeURIComponent(m[1]).split("/").pop().replace(/\.webp$/i, "");
-    await db.collection("users").doc(d.hostUid).collection("images").doc(name).set({
-      imageName: name,
-      imageUrl: d.imageUrl,
-      updatedAt: FieldValue.serverTimestamp()
-    });
-  } catch (err) {}
 });
 // --- 11. ルーム設定リクエスト ---
 exports.onRoomConfigRequested = onDocumentCreated("users/{uid}/room_config_requests/{requestId}", async (event) => {

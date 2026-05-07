@@ -1259,6 +1259,7 @@ async function savePrizeMaster() {
     cost,
     exchangeRate,
     imageUrl,
+    imageName: imageKey || "",
     createdAt: serverTimestamp()
   });
 
@@ -1346,6 +1347,7 @@ async function savePrizeMastersCsv() {
       cost,
       exchangeRate,
       imageUrl,
+      imageName: normalizedImageName || "",
       createdAt: serverTimestamp()
     });
   }
@@ -1460,14 +1462,15 @@ async function refreshPrizeAdminData() {
     return;
   }
 
-  const [prizeSnap, imageSnap, missingSnap] = await Promise.all([
+  const [prizeSnap, missingSnap] = await Promise.all([
     getDocs(query(collection(db, "prize_masters"), where("hostUid", "==", state.me.uid))),
-    getDocs(collection(db, "users", state.me.uid, "images")),
     getDocs(query(collection(db, "missing_prize_images"), where("hostUid", "==", state.me.uid)))
   ]);
 
   state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-  state.prizeImages = imageSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  state.prizeImages = prizeSnap.docs
+    .filter(d => d.data().imageUrl && !d.data().imageUrl.startsWith("__missing__:"))
+    .map(d => ({ id: d.id, imageName: d.data().imageName, imageUrl: d.data().imageUrl }));
   state.missingPrizeImages = missingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   dom.targetPrizeSelect.innerHTML = `<option value="">項目を選択</option>`;
