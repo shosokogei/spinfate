@@ -1470,7 +1470,7 @@ async function refreshPrizeAdminData() {
   state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
   state.prizeImages = prizeSnap.docs
     .filter(d => d.data().imageUrl && !d.data().imageUrl.startsWith("__missing__:"))
-    .map(d => ({ id: d.id, imageName: d.data().imageName, imageUrl: d.data().imageUrl }));
+    .map(d => ({ id: d.id, imageName: d.data().imageName || "", imageUrl: d.data().imageUrl }));
   state.missingPrizeImages = missingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
   dom.targetPrizeSelect.innerHTML = `<option value="">項目を選択</option>`;
