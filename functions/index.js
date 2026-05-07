@@ -286,18 +286,3 @@ exports.onPrizeDeletionRequested = onDocumentCreated("users/{uid}/prize_deletion
   await db.collection("prize_masters").doc(prizeId).delete();
   await event.data.ref.delete();
 });
-
-exports.onPrizeImageSync = onDocumentCreated("prize_masters/{id}", async (e) => {
-  const d = e.data.data();
-  if (!d.imageUrl || d.imageUrl.startsWith("__missing__:")) return;
-  try {
-    const u = new URL(d.imageUrl);
-    const m = u.pathname.match(/\/o\/(.+)$/);
-    const name = decodeURIComponent(m[1]).split("/").pop().replace(/\.webp$/i, "");
-    await db.collection("users").doc(d.hostUid).collection("images").doc(name).set({
-      imageName: name,
-      imageUrl: d.imageUrl,
-      updatedAt: FieldValue.serverTimestamp()
-    });
-  } catch (err) {}
-});
