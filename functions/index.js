@@ -206,6 +206,7 @@ exports.onPrizeImageApplyRequested = onDocumentCreated("users/{uid}/prize_image_
   await batch.commit();
   await event.data.ref.delete();
 });
+
 // --- 8. 画像削除リクエスト ---
 exports.onImageDeletionRequested = onDocumentCreated("users/{uid}/image_deletion_requests/{requestId}", async (event) => {
   const { imageName } = event.data.data();
