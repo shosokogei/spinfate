@@ -1243,15 +1243,14 @@ async function savePrizeMaster() {
   }
 
   let imageUrl = String(dom.prizeImageSelect.value || "").trim();
+  const imageKey = state.prizeImageFile ? normalizeImageKey(state.prizeImageFile.name) : "";
   if (state.prizeImageFile) {
-    const imageKey = normalizeImageKey(state.prizeImageFile.name);
     imageUrl = await uploadImageFile(
       state.prizeImageFile,
       `prize_masters/${state.me.uid}/${imageKey}.webp`
     );
   }
 
-  // データベース操作を直接行わず、サーバー側の関数を呼び出す
   const requestRef = collection(db, "users", state.me.uid, "prize_master_requests");
   await addDoc(requestRef, {
     name,
