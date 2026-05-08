@@ -1467,8 +1467,16 @@ async function refreshPrizeAdminData() {
   ]);
 
   state.prizeMasters = prizeSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const seenImageNames = new Set();
   state.prizeImages = prizeSnap.docs
-    .filter(d => d.data().imageUrl && !d.data().imageUrl.startsWith("__missing__:"))
+    .filter(d => {
+      const url = d.data().imageUrl;
+      const name = d.data().imageName || "";
+      if (!url || url.startsWith("__missing__:") || !name) return false;
+      if (seenImageNames.has(name)) return false;
+      seenImageNames.add(name);
+      return true;
+    })
     .map(d => ({ id: d.id, imageName: d.data().imageName || "", imageUrl: d.data().imageUrl }));
   state.missingPrizeImages = missingSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
@@ -1566,7 +1574,7 @@ async function uploadMissingPrizeImages(files) {
       createdAt: serverTimestamp()
     });
   }
-
+  await new Promise(resolve => setTimeout(resolve, 1500));
   await refreshPrizeAdminData();
 }
 
