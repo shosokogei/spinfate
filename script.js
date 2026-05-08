@@ -1332,8 +1332,8 @@ async function savePrizeMastersCsv() {
     if (!name) continue;
 
     let imageUrl = "";
+    const normalizedImageName = imageName ? normalizeImageKey(imageName) : "";
     if (imageName) {
-      const normalizedImageName = normalizeImageKey(imageName);
       imageUrl = await resolveExistingPrizeImageUrl(imageName);
       if (!imageUrl || imageUrl.startsWith("__missing__:")) {
         imageUrl = `__missing__:${normalizedImageName}`;
